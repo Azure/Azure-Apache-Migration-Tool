@@ -211,6 +211,11 @@ sub pars_FirstPass
     }
     
     #*********************************************************
+    # Prompt for Default site transfer details
+    #*********************************************************    
+    pars_SelectSites(DEFAULT_WEB_SITE,"",$strDefaultRoot);
+    
+    #*********************************************************
     # Exit is no site was selected for Migration...
     #*********************************************************
     if ($nSitesSelected == 0)

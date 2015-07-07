@@ -3,13 +3,27 @@
 The Azure Apache Migration Migration Tool is a tool that allows customers to move their existing sites hosted on Linux servers running Apache into the cloud on Azure websites. For more information check out [movemetothecloud.net](https://www.movemetothecloud.net/).
 
 ## Prerequisites
-This requires perl LWP HTTPS support. On Ubuntu this can easily be installed by apt-get with:
+This requires some perl libraries. Most should be included with your distro, the most notable missing piece is perl LWP HTTPS support. By default we don't include this library because it takes OS specific dependencies.
+
+### Ubuntu
+perl LWP HTTPS can be installed with apt-get:
 
 ```
 sudo apt-get install liblwp-protocol-https-perl
 ```
 
-By default we don't include this library because it takes OS specific dependencies.
+### CentOS 7
+perl LWP HTTPS can be installed with yum:
+
+```
+yum install perl-LWP-Protocol-https
+```
+
+You may also need to install some additional libraries:
+```
+yum install perl-Digest-MD5
+yum install perl-Compress-Raw-Zlib
+```
 
 ## Running the tool
 To run the tool, execute:

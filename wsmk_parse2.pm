@@ -11342,7 +11342,7 @@ sub pars_setUserdir
 			if($arry[0] eq "HOME")
 			{
 				chomp($arry[1]);	
-				@Listing = ftp_Listing($arry[1]);						
+				@Listing = `ls -L $arry[1]`; # ftp_Listing($arry[1]);
 				last;
 			}
 		}
@@ -11359,7 +11359,7 @@ sub pars_setUserdir
 				my @dirListing;
 				my $continue = 0;
 				chomp($temp);
-			    @dirListing = ftp_Listing($finalPath);						
+			    @dirListing = `ls -L $finalPath`; # ftp_Listing($finalPath);						
 				foreach(@dirListing)
 				{
 				    chomp($_);
@@ -11410,7 +11410,7 @@ sub pars_setUserdir
                 my @dirListing;
                 my $continue = 0;
                 chomp($temp);
-                @dirListing = ftp_Listing($finalPath);						
+                @dirListing = `ls -L $finalPath`; # ftp_Listing($finalPath);
                 foreach(@dirListing)
                 {
                     chomp($_);
@@ -11473,7 +11473,7 @@ sub pars_setUserdir
 				my @dirListing;
 				my $continue = 0;
 				chomp($temp);
-			    @dirListing = ftp_Listing($finalPath);						
+			    @dirListing = `ls -L $finalPath`; # ftp_Listing($finalPath);
 				foreach(@dirListing)
 				{
 					chomp($_);
