@@ -1,7 +1,7 @@
 
 use strict;
 # package used to get the current working folder
-use wsmk_wrkFolder;
+use aamt_wrkFolder;
 my $currentLibfolder;
 # get the current working folder and unset the environment variable that has been set in the 
 # batch file/ shell script file 
@@ -20,13 +20,13 @@ use File::Listing;          #to display a list of files in a directory
 use Time::localtime;        #get system time information
 
 # custom packages developed to be used by the tool	
-use wsmk_constants;		    #for user input or error or file constants 
-use wsmk_utilityFunctions;  #for common procedures
-use wsmk_informationLog;    #used for logging information into Log,Status or Recovery file
-use wsmk_userInterface;     #used for user interface definition
-use wsmk_auth;	            #used for Authentication and user query module 	
-use wsmk_parse;             #used for parsing the conf file and getting the site information	
-use wsmk_parse2;		    #used for parsing the conf file and generating the 2D array.
+use aamt_constants;		    #for user input or error or file constants 
+use aamt_utilityFunctions;  #for common procedures
+use aamt_informationLog;    #used for logging information into Log,Status or Recovery file
+use aamt_userInterface;     #used for user interface definition
+use aamt_auth;	            #used for Authentication and user query module 	
+use aamt_parse;             #used for parsing the conf file and getting the site information	
+use aamt_parse2;		    #used for parsing the conf file and generating the 2D array.
 
 # main subroutine starts here
 my $localConfFilePath;

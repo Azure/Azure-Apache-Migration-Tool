@@ -1,5 +1,5 @@
 #---------------------------------------------------------------------------------------------------------
-#Script Name 		:	wsmk_constants.pm
+#Script Name 		:	aamt_constants.pm
 #Description	    : 	Package is used to define the strings that would be used by the AIISMT wizard
 #-----------------------------------------------------------------------------------------------
 
@@ -73,7 +73,7 @@ use constant  M                             =>					"Machine Address cannot have 
 #*****************************************************************************#
 #            The Following Constants are used in naming the files             # 
 #*****************************************************************************#
-use constant AMW							=>					"wsmk_";
+use constant AMW							=>					"aamt_";
 use constant FILE_RECOVERY					=>					"_Recovery.txt";
 use constant FILE_STATUS					=>					"_Status.htm";
 use constant FILE_LOG						=>					"_Log.htm";
@@ -87,18 +87,18 @@ use constant FILE_SITES						=>					"_sites.txt";
 use constant FILE_IISCONFIG					=>					"_config.xml";
 use constant FILE_USERLIST					=>					"_userlist.txt";
 use constant FILE_ACL						=>					"_acl.txt";	
-use constant FILE_TARGET_INFO               =>                  "wsmk_target_info.txt";
-use constant FILE_TARGET_FPSE				=>					"wsmk_target_fpse.vbs";
-use constant FILE_TARGET_OVERALL			=>					"wsmk_wrt_overall_target.wsf";
-use constant FILE_TARGET_ACL				=>					"wsmk_wrt_acl.vbs";
-use constant FILE_TARGET_CREATEUSER			=>					"wsmk_wrt_createuser.vbs";
-use constant FILE_TARGET_IMPORT				=>					"wsmk_wrt_import.vbs";
-use constant FILE_TARGET_SCRIPTS			=>					"wsmk_iis_scripts.vbs";
-use constant FILE_TARGET_INFORMATIONLOG     =>					"wsmk_informationLog.vbs";
-use constant FILE_TARGET_CONSTANTS			=>					"wsmk_wrt_constants.vbs";
-use constant FILE_TARGET_UTILITIES			=>					"wsmk_wrt_utilities.vbs";
-use constant FILE_TARGET_VERIFY				=>					"wsmk_verifier_verifytarget.vbs";
-use constant FILE_PERLPRESENT			    =>				    "WSMK_PERLPRESENT.BAT";
+use constant FILE_TARGET_INFO               =>                  "aamt_target_info.txt";
+use constant FILE_TARGET_FPSE				=>					"aamt_target_fpse.vbs";
+use constant FILE_TARGET_OVERALL			=>					"aamt_wrt_overall_target.wsf";
+use constant FILE_TARGET_ACL				=>					"aamt_wrt_acl.vbs";
+use constant FILE_TARGET_CREATEUSER			=>					"aamt_wrt_createuser.vbs";
+use constant FILE_TARGET_IMPORT				=>					"aamt_wrt_import.vbs";
+use constant FILE_TARGET_SCRIPTS			=>					"aamt_iis_scripts.vbs";
+use constant FILE_TARGET_INFORMATIONLOG     =>					"aamt_informationLog.vbs";
+use constant FILE_TARGET_CONSTANTS			=>					"aamt_wrt_constants.vbs";
+use constant FILE_TARGET_UTILITIES			=>					"aamt_wrt_utilities.vbs";
+use constant FILE_TARGET_VERIFY				=>					"aamt_verifier_verifytarget.vbs";
+use constant FILE_PERLPRESENT			    =>				    "AAMT_PERLPRESENT.BAT";
 use constant FILE_TARGET_BATCHFILE			=>					"AIISMT_TARGET.BAT";		
 use constant FILE_TARGET_VERIFY_BAT			=>					"AIISMT_VERIFY.BAT";		
 
@@ -449,7 +449,7 @@ use constant FILE_WRITE		=> 2;
 use constant FILE_APPEND	=> 3;
 use constant FILE_WRITE_EX	=> 4;
 use constant FILE_READ_EX	=> 5;
-use constant WSMK_ERR_FILEOPEN_FAILED => "File could not be opened";
+use constant AAMT_ERR_FILEOPEN_FAILED => "File could not be opened";
 use constant RECOVERY_MODE_0    => "FRESHRUN";
 use constant RECOVERY_MODE_1    => "WSMKREC1";
 use constant RECOVERY_MODE_2    => "WSMKREC2";

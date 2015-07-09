@@ -1,11 +1,11 @@
 #----------------------------------------------------------------------------------------------
-#Script Name 	    :	wsmk_utilityfunctions.pm
+#Script Name 	    :	aamt_utilityfunctions.pm
 #Description	    : 	General utility functions.		
 #use of standard packages
 use Cwd;
 
 #use of custom packages
-use wsmk_constants;
+use aamt_constants;
 use LWP::Simple;
 use FileHandle;
 
@@ -367,17 +367,17 @@ sub utf_FileOpen
 		}
 		
 		#command to open file
-        open $fhandle, $OpenModeName or die "WSMK_ERR_FILEOPEN_FAILED";
+        open $fhandle, $OpenModeName or die "AAMT_ERR_FILEOPEN_FAILED";
 	};
 
 	if($@) 
 	{ 
-		if ($@ =~ /WSMK_ERR_FILEOPEN_FAILED/ )
+		if ($@ =~ /AAMT_ERR_FILEOPEN_FAILED/ )
 		{
-			$fhandle = WSMK_ERR_FILEOPEN_FAILED;
+			$fhandle = AAMT_ERR_FILEOPEN_FAILED;
 			$ret = 0;
 
-			$logFileReturn= ilog_displayandLog( WSMK_ERR_FILEOPEN_FAILED,DEBUG_ONLY,'INT_ERROR',WSMK_ERR_FILEOPEN_FAILED,"$FileName", __LINE__);
+			$logFileReturn= ilog_displayandLog( AAMT_ERR_FILEOPEN_FAILED,DEBUG_ONLY,'INT_ERROR',AAMT_ERR_FILEOPEN_FAILED,"$FileName", __LINE__);
 		}
 	} 
     

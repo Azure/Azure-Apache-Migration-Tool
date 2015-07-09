@@ -1,14 +1,14 @@
 #-------------------------------------------------------------------------
-# Script Name 	    :	wsmk_parse.pm
+# Script Name 	    :	aamt_parse.pm
 #
 # Description	    : 	Pre-Parses the apache config files and accepts the
 #                       user inputs requiered for the migration.   
 #                       Also generates Recovery Info.
 #-------------------------------------------------------------------------
 use strict;
-use wsmk_constants;
-use wsmk_informationLog;
-use wsmk_utilityFunctions;
+use aamt_constants;
+use aamt_informationLog;
+use aamt_utilityFunctions;
 #-------------------------------------------------------------------------
 #        Global variables used by this module
 my $strSessionFolder;   # Path at which all files pertaining to the current

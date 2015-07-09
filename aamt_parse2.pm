@@ -14,7 +14,7 @@
 #######################################################################################################################
 use strict;
 use xml::doc;
-use wsmk_utilityFunctions;
+use aamt_utilityFunctions;
 use JSON;
 use Digest::MD5 qw(md5_hex);
 use LWP::UserAgent;
@@ -163,7 +163,6 @@ sub pars_CreateReadinessReport
     $rComputername =~ s/\n//g;
     my $login = getlogin || getpwuid($<) || "Kilroy";
     my $guid = &genGUID($rComputername.$login);
-    # todo: write to file
     my %rServer = ();
     my %rServers = ();
     my %rServers2 = ();
@@ -218,7 +217,6 @@ sub pars_CreateReadinessReport
     }
     
     $json_text = encode_json ( \@rSites );
-
     my %appPool = ("Name"=>"DefaultLinuxAppPool","Enable32BitOn64"=>"false","IsClassicMode"=>"false","NetFxVersion"=>"4");
     my @appPools = ();
     $appPools[0] = \%appPool;
@@ -558,31 +556,9 @@ sub pars_PublishSite
                     elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
                     {
                         mkdir "$workingFolder/wwwroot";
-                        my @filesToCopy;
-                        # @files = File::Find::Rule->file()
-                        #     ->name("*config*.php")
-                        #     ->extras({ follow => 1 })
-                        #     ->in($documentRoot);
+                        my @filesToCopy;                        
                         my $lineMatch = qr/define.*'DB_NAME'|define.*'DB_USER'|define.*'DB_PASSWORD'|define.*'DB_HOST'|define.*'WP_CONTENT_DIR'/;
-                        &getConfigFiles($documentRoot, $lineMatch, $workingFolder, \@files);
-
-                        # for my $phpFile (@files)
-                        # {
-                        #     open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-                        #     my $found = FALSE;
-                        #     while (my $line = <$fh>)
-                        #     {
-                        #         if ($line =~ /define.*'DB_NAME'/ || $line =~ /define.*'DB_USER'/ || $line =~ /define.*'DB_PASSWORD'/ || $line =~ /define.*'DB_HOST'/ || $line =~ /define.*'WP_CONTENT_DIR'/)
-                        #         {
-                        #             my $newName = $phpFile;
-                        #             my $find = quotemeta $documentRoot; # escape regex
-                        #             $newName =~ s/$find//g;
-                        #             File::Copy::copy($phpFile, "$workingFolder/wwwroot/${newName}_copy");
-                        #             last;
-                        #         }
-                        #     }
-                        # }
-                                                
+                        &getConfigFiles($documentRoot, $lineMatch, $workingFolder, \@files);                                                                        
                         @files = File::Find::Rule->file()
                             ->name("*_copy")                            
                             ->in("$workingFolder/wwwroot");
@@ -620,7 +596,6 @@ sub pars_PublishSite
                             close $out;
                             if (!$settingsInserted)
                             {
-                                # print $out $settingsLine;
                                 # delete the file
                                 unlink $outFile;
                             }
@@ -654,8 +629,7 @@ sub pars_PublishSite
                     # settings.php is probably a common name and site detection should be improved
                     $siteType = "drupal";
                     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Searching for Drupal site found\n"); }
-                    my $originalConfig = @files[0];
-                    # ilog_print(1, "php read_drupal_settings.php $originalConfig $workingFolder/config-out.txt;");
+                    my $originalConfig = @files[0];                    
                     `php read_drupal_settings.php "$originalConfig" "$workingFolder/config-out.txt";`;
                     open my $originalConfig, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
                     while (my $line = <$originalConfig>)
@@ -698,61 +672,9 @@ sub pars_PublishSite
                         elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
                         {
                             mkdir "$workingFolder/wwwroot";
-                            my @filesToCopy;
-                            # @files = File::Find::Rule->file()
-                            #     ->name("*.php")
-                            #     ->in($documentRoot);
+                            my @filesToCopy;                            
                             my $lineMatch = qr/databases.*'default'.*'default'/;
                             &getConfigFiles($documentRoot, $lineMatch, $workingFolder, \@files);
-
-                            # for my $phpFile (@files)
-                            # {
-                            #     open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-                            #     my $found = FALSE;
-                            #     my $filecopied = FALSE;
-                            #     while (my $line = <$fh>)
-                            #     {
-                            #         if ($line =~ /databases.*'default'.*'default'/ && !$filecopied)
-                            #         {
-                            #             # resolve symlinks
-                            #             my $documentRoot2 = quotemeta($documentRoot);
-                            #             if ($phpFile !~ /$documentRoot2/)
-                            #             {
-                            #                 my $baseFile = basename($phpFile);
-                            #                 if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Relocating phpFile: $phpFile (basename: $baseFile | documentRoot: $documentRoot)\n"); }
-                            #                 # it is not under documentRoot, let's try to locate it under document root.
-                            #                 my @docrootfiles = File::Find::Rule->file()
-                            #                     ->name($baseFile)
-                            #                     ->extras({ follow => 1 })
-                            #                     ->in($documentRoot);
-                                            
-                            #                 if (@docrootfiles > 0)
-                            #                 {
-                            #                     my $file0 = $docrootfiles[0];                                                
-                            #                     $phpFile = $file0;
-                            #                 } 
-                            #                 elsif (@docrootfiles > 1) {}# this is a bug...
-                            #             }
-
-                            #             my $newName = $phpFile;
-                            #             $newName =~ s/$documentRoot2//g;
-                            #             $newName =~ s/^\///g;
-                            #             my $abPath = abs_path($phpFile);
-                            #             my $dest = "$workingFolder/wwwroot/${newName}_copy";
-                            #             my $destdirname  = dirname($dest);
-                            #             if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Copying phpFile: From: $abPath | To: $dest\n"); }
-                            #             if (! -d $destdirname)
-                            #             {
-                            #                 my $dirs = eval { mkpath($destdirname) };
-                            #                 die "Failed to create $destdirname: $@\n" unless $dirs;
-                            #             }
-
-                            #             File::Copy::copy($abPath, $dest) or die "Failed to copy $abPath: $!\n";;
-                            #             $filecopied = TRUE;
-                            #         }
-                            #     }
-                            # }
-                            
                             @files = File::Find::Rule->file()
                                 ->name("*_copy")
                                 ->in("$workingFolder/wwwroot");
@@ -797,7 +719,6 @@ sub pars_PublishSite
                                 close $out;
                                 if (!$settingsInserted)
                                 {
-                                    # print $out $settingsLine;
                                     # delete the file
                                     unlink $outFile;
                                 }
@@ -832,7 +753,6 @@ sub pars_PublishSite
                     $siteType = "joomla";
                     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Searching for Joomla site found\n"); }
                     my $originalConfig = @files[0];
-                    # ilog_print(1, "php read_joomla_settings.php $originalConfig $workingFolder/config-out.txt;");
                     `php read_joomla_settings.php "$originalConfig" "$workingFolder/config-out.txt";`;
                     open my $originalConfig, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
                     while (my $line = <$originalConfig>)
@@ -875,10 +795,7 @@ sub pars_PublishSite
                         elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
                         {                            
                             mkdir "$workingFolder/wwwroot";
-                            my @filesToCopy;
-                            # @files = File::Find::Rule->file()
-                            #     ->name("*.php")
-                            #     ->in($documentRoot);
+                            my @filesToCopy;                            
                             for my $phpFile (@files)
                             {
                                 if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: JOOMLA: modifying $phpFile\n"); }
@@ -930,7 +847,6 @@ sub pars_PublishSite
                             @files = File::Find::Rule->file()
                                 ->name("*_copy")
                                 ->in("$workingFolder/wwwroot");
-                            # my $settingsLine = "\$databases['default']['default']=array('driver'=>'mysql','database' =>'$rDatabase','username'=>'$rUsername','password'=>'$rPassword','host'=>'$rServer','port' => '','prefix' => '');\n";
                             my $settingsLine = "public \$db = '$rDatabase';\npublic \$user = '$rUsername';\npublic \$password = '$rPassword';\npublic \$host = '$rServer';\n";
                             for my $phpFile (@files)
                             {
@@ -965,7 +881,6 @@ sub pars_PublishSite
                                 close $out;
                                 if (!$settingsInserted)
                                 {
-                                    # print $out $settingsLine;
                                     # delete the file
                                     unlink $outFile;
                                 }
@@ -1044,11 +959,7 @@ sub getConfigFiles
     my $documentRoot = $_[0];
     my $matchLine = $_[1];
     my $workingFolder = $_[2];
-
-    ilog_print(1,"ARGS: $documentRoot | matchLine: $matchLine | workingFolder: $workingFolder\n");
-    my @files = @{$_[3]};
-    #ilog_print(1,"ARGS: $documentRoot | matchLine: $matchLine | workingFolder: $workingFolder\n");
-
+    my @files = @{$_[3]};    
     for my $phpFile (@files)
     {
         open my $fh, '<', $phpFile or die "Failed to open $_: $!";
@@ -1122,7 +1033,7 @@ sub updateTrackingStatus
     $escapedName =~ s/!/_x-bang_/g;
     use URI;
     my $uri = URI->new( "${SITE_URL}/api/${statusType}/${guid}/sitename/${escapedName}/" );
-    my $baseAddress = $uri;    
+    my $baseAddress = $uri;
     # PUT at URL
     my $ua = LWP::UserAgent->new;
     my $req = HTTP::Request->new("PUT", $baseAddress);
@@ -1135,7 +1046,7 @@ sub updateTrackingStatus
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Update status result\n: $rContent\n"); }    
 }
 
-# Returns success
+# Returns HTTP response code
 sub deployToSite
 {
     my $publishUrl = shift;
@@ -1236,7 +1147,7 @@ sub deployToSite
     ilog_print(1,"\n");
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: content upload response code: $rCode\n"); }
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: content upload result: $rContent\n"); }
-    ilog_print(1,"\n$itemToAdd published with response code: $rCode\n");
+    ilog_print(1,"\n$itemToAdd published with response code: $rCode\nTo site: $publishUrl");
     close $fileZip;
     return $rCode;
 }

@@ -10,7 +10,7 @@ my $errorLogFile ;                                  #Log file name
 my $LocalFileName;									#Renamed file name of configuration file
 my $SESSIONFILELANDLE;                              #File handle for session file
 my $migrationStatus;                                #To indicate the wizard is running in FRESHRUN mode or RECOVERY
-my $logFilereturn;	                                #RETURN VALUE for the file access methods in wsmk_informationLog 
+my $logFilereturn;	                                #RETURN VALUE for the file access methods in aamt_informationLog 
 my $parseSuccess ;                                  #To run in the recovery mode, the output of auth_parseRecovery file 
 my $startTime;                                      #Migration start time for logging 
 my $fileret;
@@ -37,8 +37,8 @@ my  $REC_MY_NAME_VIRTUAL_HOST ='[NAME_VIRTUAL_HOST]' ;
 ################################################################################ 	
 sub auth_main                                               
 {
-    ui_clearScreen();         #used to clear screen defined in wsmk_userinterface.pm file
-	ui_Title();               #used for title of the migartion kit defined in wsmk_userinterface.pm file
+    ui_clearScreen();         #used to clear screen defined in aamt_userinterface.pm file
+	ui_Title();               #used for title of the migartion kit defined in aamt_userinterface.pm file
 	ui_printBanner();
 	&ilog_print(1,TITLE_SESSION_NAME);                      #To display title pertaining to session name 
 	($tempretval,$sessionName)=auth_inputSessionName();     #user input "session name" for migration   

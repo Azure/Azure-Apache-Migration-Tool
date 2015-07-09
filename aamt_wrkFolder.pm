@@ -6,7 +6,7 @@
 #Return				:		 returns the current working folder
 #-------------------------------------------------------------------------------
 use Cwd;
-use wsmk_constants;		 
+use aamt_constants;		 
 sub main_getCurrentLibFolder                                                  
 {                                                                             
     my		$libFolder = cwd;                                             

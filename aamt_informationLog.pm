@@ -1,13 +1,13 @@
 #----------------------------------------------------------------------------------------------
-#Script Name 	    :	wsmk_informationLog.pm
+#Script Name 	    :	aamt_informationLog.pm
 #Description	    : 	Package is used to log data supplied by individual methods in 
 #						the specified files.		
 #-----------------------------------------------------------------------------------------------
 # include external packages
 use strict;
-use wsmk_constants;
+use aamt_constants;
 use IO::File;
-use wsmk_utilityFunctions;
+use aamt_utilityFunctions;
 
 my $globSessionName;
 my $iSpin = 1;

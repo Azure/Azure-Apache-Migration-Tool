@@ -1,8 +1,8 @@
 #----------------------------------------------------------------------------------------------
-#Script Name 		:	wsmk_userInterface.pm
+#Script Name 		:	aamt_userInterface.pm
 #Description	    : 	Package is used to define methods used for User Interface
 use strict;
-use wsmk_constants;
+use aamt_constants;
 
 #-----------------------------------------------------------------------------------------------
 #Method Name	:	ui_printLine
