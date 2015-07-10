@@ -22,4 +22,5 @@ nytprof.out
 /.tar.gz/
 *.tar.gz
 *.tar
+*-junk*
 Azure-Apache-Migration-Tool/
