@@ -49,10 +49,13 @@ Important Notes:
 
 use constant TITLE_SESSION_NAME				 =>				
 "\n
-    Please choose a name (e.g.:AAASMT_1) for the current Migration Session.
+    Please choose a name (e.g.:AASMT_1) for the current Migration Session.
     Enter a new Session Name to start a  fresh Migration process or Enter 
     the  previous  Session Name to recover  from an aborted Session. Only 
-    AlphaNumeric characters, '-' and '_' are permitted in Session Name.\n";
+    AlphaNumeric characters, '-' and '_' are permitted in Session Name.\n
+    Note that this will be used to create a working folder which will 
+    store temporary files which may contain sensitive information and 
+    should be deleted when this tool is finished running.";
 
 use constant TITLE_EXIT                      =>  "\n\nThank You for using Apache to Azure App Service Migration Tool\n";
 use constant SUCCESS						=>						"1000";

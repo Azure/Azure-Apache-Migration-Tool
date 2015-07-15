@@ -13,6 +13,7 @@ use lib $currentLibfolder;
 use strict;                 #for declaration of variables prior to use
 use FileHandle;             #for file operations
 use File::Copy;             #for copying the file in a local machine  
+use File::Path;
 use LWP::Simple;            #for website header information
 use IO::Dir;			    #for directory handling
 use Sys::Hostname;          # 
@@ -41,6 +42,7 @@ eval
     ($auqRetVal,$localConfFilePath) = auth_main();        # AUQ module functionality    
     if(!($auqRetVal))
     {
+        &DeleteWorkingFolder();
 	    die CLEANUP_AND_EXIT;
     }    
 
@@ -111,14 +113,16 @@ eval
     &pars_SetRecoveryCode(RECOVERY_MODE_3);
 	utf_setCurrentModuleName(''); 
 	&utf_gettimeinfo('1');
+    &DeleteWorkingFolder();
     &TerminateTool();
 };
 if($@)
 {
     if ($@ !~ /EXIT_TOOL_NOW/)
-    {
+    {        
         # Abnormal Termination ... 
         print "$@";
+        &DeleteWorkingFolder();
     }
 }
 # end of main subroutine
@@ -130,4 +134,19 @@ sub TerminateTool
     # Restore the include to the original value
     @INC = @lib::ORIG_INC;
     exit(0);
+}
+
+sub DeleteWorkingFolder
+{
+    while($strYesOrNo!~/^\s*[YynN]\s*$/)
+    {
+        ilog_printf(1, "    Would you like to delete the working folder used to store temporary settings? (Y/N):");
+        chomp($strYesOrNo = <STDIN>);
+        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+            if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+        if ($strYesOrNo=~/^\s*[Yy]\s*$/)
+        {
+            rmtree([&utf_getCurrentWorkingFolder()]);
+        }
+    }
 }

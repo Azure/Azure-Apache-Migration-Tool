@@ -38,9 +38,14 @@ my  $REC_MY_NAME_VIRTUAL_HOST ='[NAME_VIRTUAL_HOST]' ;
 sub auth_main                                               
 {
     ui_clearScreen();         #used to clear screen defined in aamt_userinterface.pm file
-	ui_Title();               #used for title of the migartion kit defined in aamt_userinterface.pm file
-	ui_printBanner();
-	&ilog_print(1,TITLE_SESSION_NAME);                      #To display title pertaining to session name 
+	ui_Title();               #used for title of the migartion kit defined in aamt_userinterface.pm file	
+    if (!&auth_isUserRoot())
+    {
+        return (0, 0);
+    }
+
+    ui_printBanner();
+	&ilog_print(1,TITLE_SESSION_NAME);                      #To display title pertaining to session name    
 	($tempretval,$sessionName)=auth_inputSessionName();     #user input "session name" for migration   
 	if(!($tempretval))
     {
@@ -158,6 +163,22 @@ sub auth_main
 ################################################################################
 #Main Subroutine for AUQ module ends here
 ################################################################################ 	
+
+#---------------------------------------------------------------------------------
+#Method Name	:	auth_checkIfUserIsRoot
+#Description	: 	Checks if the user is root
+#Return Value   :	1. TRUE / FALSE
+#---------------------------------------------------------------------------------
+sub auth_isUserRoot
+{
+    if ($> == 0)
+    {        
+        return 1;
+    }
+    
+    ilog_print(1,"ERROR: Script must be run as root\n");    
+    return 0;
+}
 
 #---------------------------------------------------------------------------------
 #Method Name	:	auth_getConfFile
