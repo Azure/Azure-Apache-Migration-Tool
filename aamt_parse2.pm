@@ -28,7 +28,7 @@ use File::Find::Rule;
 use File::Basename;
 use Cwd 'abs_path';
 use File::Path;
-my $DEBUG_MODE = FALSE;
+my $DEBUG_MODE = 1;
 
 #----------------------------------------------------------------------------------------------------------------------
 #                                          Global variables used by this module
@@ -185,15 +185,21 @@ sub pars_CreateReadinessReport
     my $siteIndex = 0;
     for($i = $start;$i <= $rowCount; $i++)
     {
+        my $mySiteName = $array[$i][SITENAME];
+        if(!&pars_siteSelected($mySiteName))
+        {
+            continue;
+        }
+
         my %rSite = ();
         my @defaultDocs;
-        my @bindings;
-        my %binding;
+        my @bindings;        
         my @databases;
         my %database;
         $rSite{"AppPoolName"} = "DefaultLinuxAppPool";
         $rSite{"ServerName"} = $rComputername;
-        my $mySiteName = $array[$i][SITENAME];
+        
+        
         $rSite{"SiteName"} = $mySiteName;
         if (&pars_siteHasDb($mySiteName))
         {
@@ -205,15 +211,29 @@ sub pars_CreateReadinessReport
         
         $defaultDocs[0] = $array[$i][DIRECTORYINDEX];        
         $rSite{"DefaultDocuments"} = \@defaultDocs;
+
+        my %binding;
         $binding{"Port"} = $array[$i][PORT];
         $binding{"CustomServerIP"} = "false";
         $binding{"CustomHostName"} = "true";
-        $binding{"Name"} = $array[$i][PORT];
-        $binding{"Protocol"} = 0;
+        $binding{"Name"} = $array[$i][PORT];        
+        # check SSL/HTTPS
+        if (1) # (($array[$i][SSLENGINE] ne "" && $array[$i][SSLENGINE] ne "off") || $array[$i][SSLCERTIFICATEFILE] ne "")
+        {
+            # Corresponds to IP SSL, however it may be SNI SSL
+            $binding{"Protocol"} = "2";
+        }
+        else
+        {
+            $binding{"Protocol"} = "0";
+        }
+
         $bindings[0] = \%binding;
+        
         $rSite{"Bindings"} = \@bindings;
         $rSites[$siteIndex] = \%rSite;
         $json_text = encode_json ( \%rSite );
+        if ($DEBUG_MODE) { ilog_print(1,"\nsite JSON:\n$json_text\n"); }
         $siteIndex++;
     }
     
@@ -1312,6 +1332,7 @@ sub pars_Generate2D
                     }
                 }
             }
+
             if($serverName eq "EMPTY")  
             {
                 $serverName = "Site On $temp";
@@ -1337,8 +1358,9 @@ sub pars_Generate2D
 
             $siteName = $serverName;
             if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: serverName is: $serverName\n"); }
-            if(pars_siteSelected("$serverName"))
+            if(&pars_siteSelected($serverName))
             {
+                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: processing selected site: $serverName\n"); }
                 &pars_setVirtualhost();             
             }
             else
@@ -1446,20 +1468,18 @@ sub pars_Generate2D
     }
 
     # Start processing for Userdir directive
-    &pars_setUserdir();
-
+    # &pars_setUserdir();
     # Generate The Local user file to be used by the work items target module to create local users on the target box.
     #&pars_createLocaluserFile();
-    # Create the Config.XML reading appropriate values from the 2d array.
-    &pars_createXML();
-
+    # Create the Config.XML reading appropriate values from the 2d array. configxml
+    # &pars_createXML();
     ## Generate The Task List file to be used by the work items source module for File transfer.
     # &pars_createTasklistFile();
     # Display the 2-Dimensional array corresponding to the site content.
-    #printxml
     # &pars_printArraysite();
     # Display the 2-Dimensional array corresponding to the Directory content.
     # &pars_printArraydir();
+    &pars_CreateReadinessReport();
     return 1;
 }
 
@@ -4578,8 +4598,10 @@ sub pars_setDefaultsite
     }
 
     # PARSE COMMON
+    my $backupRowCount = $rowCount;
     $rowCount = 0;
     pars_common2d();
+    $rowCount = $backupRowCount;
 }
 
 #######################################################################################################################
@@ -4983,6 +5005,7 @@ sub pars_siteHasDb
 sub pars_siteSelected
 {
     my $siteName = shift;
+    print "\nDEBUG: CHECKING SITESELECTED ($ResourceFile): $siteName";
     $siteName =~ s/^\s+//;
     $siteName =~ s/\s+$//;
     my @tmpArray;
@@ -4995,11 +5018,10 @@ sub pars_siteSelected
     {
         if($@=~/ERR_FILE_OPEN/)
         {   
-            # log error and exit tool
-            
+            # log error and exit tool           
             ilog_setLogInformation('INT_ERROR',$recoveryFile,ERR_FILE_OPEN,__LINE__);       
             return FALSE;            
-        }        
+        }
     }
     else
     {

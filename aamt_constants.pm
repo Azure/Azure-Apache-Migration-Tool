@@ -264,7 +264,6 @@ use constant ERR_INVALID_LOGIN_CREDENTIALS  =>                  "Invalid login c
 use constant ERR_INVALID_FILE_PATH          =>                  "Incorrect file path\n\n";
 use constant ERR_INPUT_COUNT_OVER           =>                  "Maximum login attempts are over.\n\n";
 use constant ERR_INVALID_WEB_SERVER         =>                  "Invalid Web server.Please see the help file for details\n\n";
-use constant ERR_INVALID_IP                 =>                  "Invalid IP Address\n\n";
 use constant ERR_INVALID_RECOVERY_FILE      =>                  "Invalid Recovery file.Please rerun the wizard\n\n";
 use constant ERR_FILE_TRANSFER              =>                  "An Error has occured while transferring the file\n\n";
 use constant ERR_SERVER_IP                  =>                  "Unable to resolve IP of the machine\n\n";

@@ -79,11 +79,12 @@ eval
         # my @files        = grep { -f } glob( '*.conf' );
         my @files = File::Find::Rule->file()
             ->name("*apache*")            
-            ->in($strCurWorkingFolder);
-
+            ->in($workingFolder);
+        
         my @fhs          = map { open my $fh, '<', $_; $fh } @files;
         my $concatenated = '';
-        while (my $fh = shift @fhs) {
+        while (my $fh = shift @fhs) 
+        {
             while ( my $line = <$fh> )
             {
                 $concatenated .= $line;
@@ -107,8 +108,7 @@ eval
         # Parser Module second pass
         &pars_SetRecoveryCode(RECOVERY_MODE_2);
     }
-
-    &pars_CreateReadinessReport();
+    
     &pars_UploadPublishSettingsAllSites();
     &pars_SetRecoveryCode(RECOVERY_MODE_3);
 	utf_setCurrentModuleName(''); 
@@ -138,6 +138,7 @@ sub TerminateTool
 
 sub DeleteWorkingFolder
 {
+    my $strYesOrNo = "";
     while($strYesOrNo!~/^\s*[YynN]\s*$/)
     {
         ilog_printf(1, "    Would you like to delete the working folder used to store temporary settings? (Y/N):");
