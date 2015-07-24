@@ -19,5 +19,15 @@ fwrite($fh, "DB_HOST=$wpSetting\n");
 $wpSetting = WP_SITEURL;
 fwrite($fh, "WP_SITEURL=$wpSetting\n");
 
+$files = get_included_files();
+fwrite($fh, "INCLUDED_FILES=");
+foreach ($files as $file) 
+{ 
+    if ($file != __FILE__)
+    {
+        fwrite($fh, "${file};");
+    }
+}
+
 fclose($fh);
 ?>

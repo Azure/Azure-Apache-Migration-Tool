@@ -169,7 +169,8 @@ sub pars_FirstPass
             if (lc($strDirectiveName) eq "/virtualhost")
             {
                 $isVirtualHost =0;
-                pars_SelectSites($strSiteName,$strSiteIP,$strSiteRoot);
+                ### adriang: pars_SelectSites($strSiteName,$strSiteIP,$strSiteRoot);
+                pars_AddSelectSites($strSiteName,$strSiteIP,$strSiteRoot);
                 foreach $TempIP (@NameVirtualHostIPs)
                 {
                     push(@NameVirtualHosts,$strHostHeader)
@@ -213,7 +214,8 @@ sub pars_FirstPass
     #*********************************************************
     # Prompt for Default site transfer details
     #*********************************************************    
-    pars_SelectSites(DEFAULT_WEB_SITE,"",$strDefaultRoot);
+    ### adriang: pars_SelectSites(DEFAULT_WEB_SITE,"",$strDefaultRoot);
+    &pars_AddSelectSites(DEFAULT_WEB_SITE,"",$strDefaultRoot);
     
     #*********************************************************
     # Exit is no site was selected for Migration...
@@ -247,6 +249,122 @@ sub pars_FirstPass
     
     utf_FileWrite(DEFAULT_SITE_FILE,$strDefaultName,PATH_REL);
     utf_DeleteOnExit(AMW . &ilog_getSessionName() . DEFAULT_SITE_FILE);
+}
+
+#-------------------------------------------------------------------------
+# Method Name       :        pars_SelectSites
+# Description       :        The method gets the lists of sites to be 
+#                            migrated from the user
+# Input             :        Sitename, IP List and Doc root
+#
+# Output            :        @selected_sites is populated
+#
+#
+# Return Value      :        boolean
+#-------------------------------------------------------------------------
+sub pars_AddSelectSites
+{
+    my $strYesOrNo = "";
+    my ($strSiteName,$strSiteIP,$strSiteRoot) = @_;
+    my $strNewRoot = "";
+    my $strIP ="";
+    my $strRecoveryInfo;		# Info to be written on recovery file.
+    my $promptyn;
+    
+    #***********************************************************
+    # If Site-Name is blank, change it to a appropriate name...
+    #***********************************************************
+    if (!$strSiteName)
+    {
+        $strSiteName = DEFAULT_SITE_ON.$strSiteIP;
+    }
+    # ilog_print(1,"\n\n");
+    # ui_printline();
+    # ilog_printf(MSG_SITE_DETAILS,$strSiteName);
+    # if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Site root to be processed [strSiteRoot] : $strSiteRoot\n"); }
+    # ui_printline();
+    # ilog_printf(MSG_SOURCE_PATH, $strSiteRoot);
+    # $strYesOrNo =" ";
+    # while($strYesOrNo!~/^\s*[YynN]\s*$/)
+    # {           
+    #     ilog_printf(MSG_MIGRATE_SITE,$strSiteName);
+    #     chomp($strYesOrNo = <STDIN>);
+    #     ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO) 
+    #         if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+    # }
+    # return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
+    
+    $strNewRoot = "";
+    # mysql databases
+    $strYesOrNo =" ";
+    # my $mySQL = FALSE;
+    # while($strYesOrNo!~/^\s*[YynN]\s*$/)
+    # {        
+    #     ilog_printf(MSG_MIGRATE_MYSQL,$strSiteName);
+    #     chomp($strYesOrNo = <STDIN>);
+    #     if ($strYesOrNo!~/^\s*[YynN]\s*$/) 
+    #     {
+    #         ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);            
+    #     }
+    #     elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
+    #     {
+    #         $mySQL = TRUE;
+    #     }
+    # }
+    
+    #*******************************************************
+    # Add a \ if path has just the drive name...
+    #*******************************************************
+    $strNewRoot =~ s/:$/:\\/;
+    $enableSSL = 0;    
+    $strRecoveryInfo  .=  "\n\n[$strSiteName]";					
+    $strRecoveryInfo  .=  "\nDocumentRoot=$strSiteRoot";
+    $strRecoveryInfo  .=  "\nDestinationPath=$strNewRoot";
+    $strRecoveryInfo  .=  "\nSiteIP=$strSiteIP";
+	$strRecoveryInfo  .=  "\nSSL=".( ($enableSSL) ? "yes" : "no" );
+    $strRecoveryInfo  .=  "\nDefault=$directoryIndex";
+
+    # mySQL 
+    # $strRecoveryInfo  .=  "\nMySQL=".( ($mySQL) ? "yes" : "no" );
+    # ilog_setLogInformation("REC_INFO","",$strRecoveryInfo,"","",$strSessionName);
+    $strRecoveryInfo  =  "";
+    ilog_setLogInformation("EXT_INFO","<$strSiteName>",$strRecoveryInfo,"","",$strSessionName);
+    $strRecoveryInfo  =  "$strSiteRoot";
+    ilog_setLogInformation("EXT_INFO","DocumentRoot",$strRecoveryInfo,"","",$strSessionName);
+    $strRecoveryInfo  =  "$strNewRoot";
+    ilog_setLogInformation("EXT_INFO","DestinationPath",$strRecoveryInfo,"","",$strSessionName);
+    $strRecoveryInfo  =  "$strSiteIP";
+    ilog_setLogInformation("EXT_INFO","SiteIP",$strRecoveryInfo,"","",$strSessionName);
+	$strRecoveryInfo  =  ( ($enableSSL) ? "yes" : "no" );
+    ilog_setLogInformation("EXT_INFO","SSL",$strRecoveryInfo,"","",$strSessionName);
+    $strRecoveryInfo  =  "$directoryIndex";
+    ilog_setLogInformation("EXT_INFO","Default Page",$strRecoveryInfo,"","",$strSessionName);
+    my @arrIP = split / /,$strSiteIP;
+    foreach $strIP (@arrIP)
+    {
+        # if _default_ is used change it to * <All UnAssigned>
+        $strIP =~ s/^_default_/*/;
+        
+        if (utf_isValidIP($strIP))
+        {
+            $IP_mapping{$strIP} = $strIP;			  
+        }
+        else
+        {
+            $IP_mapping{$strIP} = "";
+        }
+        if ($IP2SiteMapping{$strIP} eq "")
+        {
+            $IP2SiteMapping{$strIP} = $strSiteName;
+        } 
+        else
+        {
+            $IP2SiteMapping{$strIP} = $strSiteName.","
+                .$IP2SiteMapping{$strIP};		
+        }  
+    }
+    # adriang: does this have to be incremented if we don't run this method?
+    $nSitesSelected++;
 }
 
 #-------------------------------------------------------------------------
@@ -361,7 +479,7 @@ sub pars_SelectSites
                 .$IP2SiteMapping{$strIP};		
         }  
     }
-
+    # adriang: does this have to be incremented if we don't run this method?
     $nSitesSelected++;
 }
 

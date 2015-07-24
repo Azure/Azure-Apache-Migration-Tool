@@ -444,6 +444,15 @@ use constant USERDISABLED					=> 56;
 use constant TASKLIST						=> 57;
 use constant XML							=> 58;
 use constant HTACCESS						=> 59;
+use constant MYSQL                          => 60;
+use constant FRAMEWORK                      => 61;
+use constant CONFIGFILE                     => 62;
+use constant PUBLISH                        => 63;
+
+use constant WORDPRESS    => 'Wordpress';
+use constant DRUPAL       => 'Drupal';
+use constant JOOMLA       => 'Joomla';
+
 use constant PATH_ABS		=> 1;
 use constant PATH_REL		=> 0;
 use constant FILE_READ		=> 1;

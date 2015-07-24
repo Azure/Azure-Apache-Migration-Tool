@@ -104,12 +104,11 @@ eval
             close(HANDLE_CONF_ALL); 
         }
         
-        &pars_Generate2D(&utf_getCompleteFilePath(FILE_CONF_ALL),&utf_getCompleteFilePath(FILE_RECOVERY)); 
+        &pars_Generate2D(&utf_getCompleteFilePath(FILE_CONF_ALL),&utf_getCompleteFilePath(FILE_RECOVERY));
         # Parser Module second pass
         &pars_SetRecoveryCode(RECOVERY_MODE_2);
     }
-    
-    &pars_UploadPublishSettingsAllSites();
+        
     &pars_SetRecoveryCode(RECOVERY_MODE_3);
 	utf_setCurrentModuleName(''); 
 	&utf_gettimeinfo('1');

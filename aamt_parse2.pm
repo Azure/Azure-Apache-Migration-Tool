@@ -173,23 +173,43 @@ sub pars_CreateReadinessReport
     $osVersion =~ s/\n//g;
     $osVersion = 'LX: ' . $osVersion;
     $osVersion = substr($osVersion, 0, 50);
-    if(&pars_siteSelected("Default Web Site"))
+    $array[0][PUBLISH] = &pars_AskSelectSites($array[0][SITENAME], $array[0][DOCUMENTROOT]);
+    if ($array[0][PUBLISH])
     {
         $start = 0;
     }
     else
     {
         $start = 1;
-    }       
-
-    my $siteIndex = 0;
-    for($i = $start;$i <= $rowCount; $i++)
+    }
+    # if(&pars_siteSelected("Default Web Site"))
+    # {
+    #     $start = 0;
+    # }
+    # else
+    # {
+    #     $start = 1;
+    # }    
+    
+    my $sIndex = 0;
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: starting checking sites for selection"); }
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: rowCount: $rowCount"); }
+    for ($i = $start; $i <= $rowCount; $i++)
     {
         my $mySiteName = $array[$i][SITENAME];
-        if(!&pars_siteSelected($mySiteName))
+        if ($i != 0)
         {
-            continue;
+            $array[$i][PUBLISH] = &pars_AskSelectSites($array[$i][SITENAME], $array[$i][DOCUMENTROOT]);
+            if ( !$array[$i][PUBLISH] )
+            {
+                # if we are not publishing the site, go to the next one
+                next;
+            }
         }
+        # if(!&pars_siteSelected($mySiteName))
+        # {
+        #     continue;
+        # }
 
         my %rSite = ();
         my @defaultDocs;
@@ -198,10 +218,11 @@ sub pars_CreateReadinessReport
         my %database;
         $rSite{"AppPoolName"} = "DefaultLinuxAppPool";
         $rSite{"ServerName"} = $rComputername;
-        
-        
         $rSite{"SiteName"} = $mySiteName;
-        if (&pars_siteHasDb($mySiteName))
+        # if (&pars_siteHasDb($mySiteName))
+        # populates $array global variable
+        &pars_siteHasValidFrameworkDb($i);
+        if ($array[$i][MYSQL])
         {
             $database{"ConnectionStringName"} = "MySQLConnection";
             $database{"ProviderName"} = "MySql.Data.MySqlClient";
@@ -231,10 +252,10 @@ sub pars_CreateReadinessReport
         $bindings[0] = \%binding;
         
         $rSite{"Bindings"} = \@bindings;
-        $rSites[$siteIndex] = \%rSite;
+        $rSites[$sIndex] = \%rSite;
         $json_text = encode_json ( \%rSite );
         if ($DEBUG_MODE) { ilog_print(1,"\nsite JSON:\n$json_text\n"); }
-        $siteIndex++;
+        $sIndex++;
     }
     
     $json_text = encode_json ( \@rSites );
@@ -258,14 +279,36 @@ sub pars_CreateReadinessReport
     my $req = HTTP::Request->new("PUT", $baseAddress);
     $req->header( 'Content-Type' => 'application/json' );
     $req->content( $json_text );
-    my $res = $ua->request($req);
-    my $rContent = $res->content;
-    my $rCode = $res->code;
-    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
-    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
+
+    my $publishSuccess = FALSE;
+    while (!$publishSuccess)
+    {
+        my $res = $ua->request($req);
+        my $rContent = $res->content;
+        my $rCode = $res->code;
+        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
+        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
+
+        if ($rCode !~ /^\s*2[0-9]*/)
+        {
+            ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
+            my $strYesOrNo ="";
+            while($strYesOrNo!~/^\s*[YynN]\s*$/)
+            {
+                ilog_printf(1, "    Would you like to retry uploading the readiness report? (Y/N):");
+                chomp($strYesOrNo = <STDIN>);
+                ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                    if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+                $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
+            }
+        }
+        else
+        {
+            $publishSuccess = TRUE;
+        }            
+    }
+
     ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
-    
-    return 1;
 }
 
 sub pars_UploadPublishSettingsAllSites
@@ -319,45 +362,66 @@ sub pars_UploadPublishSettingsAllSites
         close PUBLISH_HANDLE;        
     }
     
-    while ($lineContent = <RECOVERYHANDLE>)
-    {
-        # [SiteName] is the format
-        if($lineContent =~ /^\[/)
-        {
-            $lineContent =~ s/\[//;
-            $lineContent =~ s/\]//;
-            $lineContent =~ s/^\s+//;
-            $lineContent =~ s/\s+$//;
-            my $siteName = $lineContent;
-            my $mySQL = FALSE;
-            my $documentRoot = '';
-            while ($lineContent = <RECOVERYHANDLE> and $lineContent !~ /^\[/)
-            {
-                if($lineContent =~ /^MySQL/)
-                {                   
-                    if ($lineContent =~ 'yes')
-                    {
-                        $mySQL = TRUE;
-                    }
-                }
-                if($lineContent =~ /^DocumentRoot/)
-                {
-                    @tmpArray = split /=/,$lineContent;
-                    $documentRoot = $tmpArray[1];
-                    chomp($documentRoot);
-                }
-            }
+    # while ($lineContent = <RECOVERYHANDLE>)
+    # {
+    #     # [SiteName] is the format
+    #     if($lineContent =~ /^\[/)
+    #     {
+    #         $lineContent =~ s/\[//;
+    #         $lineContent =~ s/\]//;
+    #         $lineContent =~ s/^\s+//;
+    #         $lineContent =~ s/\s+$//;
+    #         my $siteName = $lineContent;
+    #         # my $mySQL = FALSE;
+    #         my $documentRoot = '';
+    #         while ($lineContent = <RECOVERYHANDLE> and $lineContent !~ /^\[/)
+    #         {
+    #             # if($lineContent =~ /^MySQL/)
+    #             # {                   
+    #             #     if ($lineContent =~ 'yes')
+    #             #     {
+    #             #         $mySQL = TRUE;
+    #             #     }
+    #             # }
+    #             if($lineContent =~ /^DocumentRoot/)
+    #             {
+    #                 @tmpArray = split /=/,$lineContent;
+    #                 $documentRoot = $tmpArray[1];
+    #                 chomp($documentRoot);
+    #             }
+    #         }
             
-            if ($lineContent =~ /^\[/)
-            {
-                # place the same line back onto the filehandle
-                seek(RECOVERYHANDLE, -length($lineContent), 1); 
-            }
+    #         if ($lineContent =~ /^\[/)
+    #         {
+    #             # place the same line back onto the filehandle
+    #             seek(RECOVERYHANDLE, -length($lineContent), 1); 
+    #         }
+            
+    #         # look up the array indice corresponding to the site name in the global site array
+    #         my $sIndex = 0;            
+    #         for ($sIndex = 0; $sIndex < @array; $sIndex++)
+    #         {
+    #             if ($array[$sIndex][SITENAME] eq $siteName)
+    #             {
+    #                 last;
+    #             }
+    #         }
+    #         # what to do if $sIndex > @array size??
 
-            &pars_UploadPublishSettings($siteName, $documentRoot, $mySQL, $strPublishSettings);
-            # return 1;        
+    #         &pars_UploadPublishSettings($siteName, $documentRoot, $strPublishSettings, 
+    #                                     $array[$sIndex][MYSQL], $array[$sIndex][FRAMEWORK], $array[$sIndex][CONFIGFILE]);
+    #     }        
+    # }
+
+    for ($i = 0; $i <= $rowCount; $i++)
+    {
+        if ($array[$i][PUBLISH])
+        {
+            &pars_UploadPublishSettings($array[$i][SITENAME], $array[$i][DOCUMENTROOT], $strPublishSettings, 
+                                        $array[$i][MYSQL], $array[$i][FRAMEWORK], $array[$i][CONFIGFILE]);
         }
     }
+
     eval
     {
         close RECOVERYHANDLE or die 'ERR_FILE_CLOSE';
@@ -383,8 +447,10 @@ sub pars_UploadPublishSettings
 {
     my $strSiteName = shift;
     my $documentRoot = shift;
-    my $mySQL = shift;
     my $strPublishSettings = shift;
+    my $mySQL = shift;
+    my $framework = shift;
+    my $configFile = shift;
     my $strYesOrNo = "";
     
     ilog_print(1,"\n\n");
@@ -394,14 +460,14 @@ sub pars_UploadPublishSettings
     $strYesOrNo =" ";
     while($strYesOrNo!~/^\s*[YynN]\s*$/)
     {
-        ilog_printf(1, "    Would you like to publish the site [$strSiteName]? (Y/N):");
+        ilog_printf(1, "    Do you want to publish the site [$strSiteName]? (Y/N):");
         chomp($strYesOrNo = <STDIN>);
         ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
             if ($strYesOrNo!~/^\s*[YynN]\s*$/);
     }
 
     return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
-    &pars_PublishSite($strSiteName, $documentRoot, $mySQL, $strPublishSettings);
+    &pars_PublishSite($strSiteName, $documentRoot, $strPublishSettings, $mySQL, $framework, $configFile);
 }
 
 sub pars_PublishSite
@@ -409,8 +475,10 @@ sub pars_PublishSite
     my $strSiteName = shift;
     my $documentRoot = shift;
     my $rComputername = `hostname`;
-    my $mySQL = shift;
     my $strPublishSettings = shift;
+    my $mySQL = shift;
+    my $framework = shift;
+    my $configFile = shift;
 
     $rComputername =~ s/\n//g;
     my $publishSuccess = FALSE;
@@ -513,415 +581,570 @@ sub pars_PublishSite
             my $dbPassword;
             my $dbHost;
             my $wpSiteurl;
-            my $siteType = '';
-
-            # WORDPRESS
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Searching for Wordpress site wp-config.php in: $documentRoot\n"); }
-            my @files = File::Find::Rule->file()
-                ->name("wp-config.php")
-                ->extras({ follow => 1 })
-                ->in($documentRoot);
-            if (@files > 0)
-            {                
-                $siteType = 'wordpress';
-                my $originalWpConfig = @files[0];
-                my $wpsubdir = $originalWpConfig;
+            # read the config file of the framework
+            my $readCommand = "";
+            my $lineMatch;
+            my $lineNotMatch = "";
+            my $settingsLine;
+            if ($framework eq WORDPRESS)
+            {
+                my $wpsubdir = $configFile;
                 my $documentRoot2 = quotemeta($documentRoot);
                 $wpsubdir =~ s/$documentRoot2//g;
                 $wpsubdir =~ s/wp-config.php//g;
-                
-                `php read_wp_settings.php "$originalWpConfig" "$workingFolder/config-out.txt";`;
-                '$workingFolder/config-out.txt';
-                open my $originalWpConfig, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
-                while (my $line = <$originalWpConfig>)
+                `php read_wp_settings.php "$configFile" "$workingFolder/config-out.txt";`;
+                $lineMatch = qr/define.*'DB_NAME'|define.*'DB_USER'|define.*'DB_PASSWORD'|define.*'DB_HOST'|define\s*\(\s*'WP_CONTENT_DIR'/;
+                $lineNotMatch = qr/define\s*\(\s*'WP_CONTENT_DIR',\s*ABSPATH\s*.\s*'wp-content'\s*\)/;
+                $settingsLine = "define('DB_NAME', '$rDatabase');\ndefine('DB_USER', '$rUsername');\ndefine('DB_PASSWORD', '$rPassword');"
+                    . "\ndefine('DB_HOST', '$rServer');\ndefine('WP_HOME','${destinationAppUrl}${wpsubdir}'); \ndefine('WP_SITEURL','${destinationAppUrl}${wpsubdir}');\n";
+            }
+            elsif ($framework eq DRUPAL)
+            {
+                `php read_drupal_settings.php "$configFile" "$workingFolder/config-out.txt";`;
+                # TODO: improve drupal detection logic
+                $lineMatch = qr/databases.*'default'.*'default'/;
+                $settingsLine = "\$databases['default']['default']=array('driver'=>'mysql','database' =>'$rDatabase','username'=>'$rUsername','password'=>'$rPassword','host'=>'$rServer','port' => '','prefix' => '');\n";
+            }
+            elsif ($framework eq JOOMLA)
+            {
+                `php read_joomla_settings.php "$configFile" "$workingFolder/config-out.txt";`;
+                $settingsLine = "public \$db = '$rDatabase';\npublic \$user = '$rUsername';\npublic \$password = '$rPassword';\npublic \$host = '$rServer';\n";
+                $lineMatch = qr/\$db\s*=|\$user\s*=|\$password\s*=|\$host\s*=/
+            }
+            else
+            {
+                # we have a bug...
+                ilog_print(1,"\nERROR: Unrecognized framework: $framework\n");
+                return 0;
+            }
+
+            open my $configFile, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
+            while (my $line = <$configFile>)
+            {
+                my @tempSplit = split('=', $line);
+                my $tempValue = @tempSplit[1];
+                chomp($tempValue);
+                if ($line =~ /DB_NAME/)
                 {
-                    my @tempSplit = split('=', $line);
-                    my $tempValue = @tempSplit[1];
-                    chomp($tempValue);
-                    if ($line =~ /DB_NAME/)
-                    {
-                        $dbName = $tempValue;
-                    }
-                    if ($line =~ /DB_USER/)
-                    {
-                        $dbUser = $tempValue;
-                    }
-                    if ($line =~ /DB_PASSWORD/)
-                    {
-                        $dbPassword = $tempValue;
-                    }
-                    if ($line =~ /DB_HOST/)
-                    {
-                        $dbHost = $tempValue;
-                    }
-                    if ($line =~ /WP_SITEURL/)
-                    {
-                        $wpSiteurl = $tempValue;
-                    }
-                    if ($line =~ /INCLUDED_FILES/)
-                    {
-                        @files = split /;/,$tempValue;
-                    }
+                    $dbName = $tempValue;
                 }
-
-                my $strYesOrNo = '';
-                # Munging
-                while($strYesOrNo !~ /^\s*[YynN]\s*$/)
+                if ($line =~ /DB_USER/)
                 {
-                    ilog_printf(1, "\n    Wordpress site detected, would you like to automatically change the wp-config.php for [$strSiteName]? (Y/N):");
-                    chomp($strYesOrNo = <STDIN>);
-                    if ($strYesOrNo!~/^\s*[YynN]\s*$/)
-                    {
-                        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);
-                    }
-                    elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
-                    {
-                        mkdir "$workingFolder/wwwroot";
-                        my @filesToCopy;                        
-                        my $lineMatch = qr/define.*'DB_NAME'|define.*'DB_USER'|define.*'DB_PASSWORD'|define.*'DB_HOST'|define.*'WP_CONTENT_DIR'/;
-                        &getConfigFiles($documentRoot, $lineMatch, $workingFolder, \@files);                                                                        
-                        @files = File::Find::Rule->file()
-                            ->name("*_copy")                            
-                            ->in("$workingFolder/wwwroot");
-                        my $settingsLine = "define('DB_NAME', '$rDatabase');\ndefine('DB_USER', '$rUsername');\ndefine('DB_PASSWORD', '$rPassword');"
-                            . "\ndefine('DB_HOST', '$rServer');\ndefine('WP_HOME','${destinationAppUrl}${wpsubdir}'); \ndefine('WP_SITEURL','${destinationAppUrl}/${wpsubdir}');\n";
-                        for my $phpFile (@files)
-                        {                        
-                            my $settingsInserted = FALSE;
-                            open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-                            my $outFile = $phpFile;
-                            $outFile =~ s/_copy//g;
-                            open my $out, '>', $outFile or die "Can't write to $outFile file: $!";                        
-                            while (my $line = <$fh>)
-                            {
-                                if ($line =~ /define.*'DB_NAME'/ || $line =~ /define.*'DB_USER'/ || $line =~ /define.*'DB_PASSWORD'/ || $line =~ /define.*'DB_HOST'/ || $line =~ /define.*'WP_CONTENT_DIR'/)
-                                {
-                                    if (!$settingsInserted)
-                                    {
-                                        print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
-                                        print $out $settingsLine;
-                                        $settingsInserted = TRUE;
-                                    }
-                                    else
-                                    {
-                                        print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
-                                    }
-                                }
-                                else
-                                {
-                                    print $out $line;
-                                }
-                            }
-
-                            close $fh;
-                            close $out;
-                            if (!$settingsInserted)
-                            {
-                                # delete the file
-                                unlink $outFile;
-                            }
-                            
-                            # delete the _copy file
-                            unlink $phpFile;
-                        }
-                        
-                        @files = File::Find::Rule->file()
-                            ->name("*.php")
-                            ->extras({ follow => 1 })
-                            ->in("$workingFolder/wwwroot");
-                        if (@files > 0)
-                        {
-                            &deployToSite($publishUrl, "$workingFolder/wwwroot", $userName, $userPWD, TRUE);
-                        }
-                    }
+                    $dbUser = $tempValue;
+                }
+                if ($line =~ /DB_PASSWORD/)
+                {
+                    $dbPassword = $tempValue;
+                }
+                if ($line =~ /DB_HOST/)
+                {
+                    $dbHost = $tempValue;
+                }
+                if ($line =~ /WP_SITEURL/)
+                {
+                    $wpSiteurl = $tempValue;
+                }
+                if ($line =~ /INCLUDED_FILES/)
+                {
+                    @files = split /;/,$tempValue;
                 }
             }
             
-            if (!(defined $siteType and length $siteType))
-            {
-                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Searching for Drupal site settings.php in: $documentRoot\n"); }
-                # DRUPAL
+            # ilog_printf(1, "\n    $framework site detected, would you like to automatically change the config file for [$strSiteName]? (Y/N):");
+            # my $strYesOrNo = '';
+
+            # while($strYesOrNo !~ /^\s*[YynN]\s*$/)
+            # {
+                # chomp($strYesOrNo = <STDIN>);
+                # if ($strYesOrNo!~/^\s*[YynN]\s*$/)
+                # {
+                #     ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);
+                # }
+                # elsif ($strYesOrNo=~/^\s*[Nn]\s*$/)
+                # {
+                #     last;
+                # }
+                # START MUNGING
+            rmtree(["$workingFolder/wwwroot"]);
+                mkdir "$workingFolder/wwwroot";
+                my @filesToCopy;
+                # this relocates files to be in the correct layout in the working folder
+                # the relocated files now end with _copy
+                &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, $workingFolder, \@files);
                 @files = File::Find::Rule->file()
-                    ->name("settings.php")
+                    ->name("*_copy")
+                    ->in("$workingFolder/wwwroot");
+                for my $phpFile (@files)
+                {
+                    my $settingsInserted = FALSE;
+                    open my $fh, '<', $phpFile or die "Failed to open $_: $!";
+                    my $outFile = $phpFile;
+                    $outFile =~ s/_copy//g;
+                    open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
+
+                    # my $openBracket = FALSE;
+                    # while (my $line = <$fh>)
+                    # {
+                    #     if ($line =~ /databases\['default'\]\['default'\]/)
+                    #     {
+                    #         if (!$settingsInserted)
+                    #         {
+                    #             print $out $settingsLine;                                        
+                    #             $settingsInserted = TRUE;
+                    #         }
+
+                    #         $openBracket = TRUE;
+                    #     }
+                        
+                    #     if ($openBracket)
+                    #     {
+                    #         print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+                    #     }
+                    #     else
+                    #     {
+                    #         print $out $line;
+                    #     }
+
+                    #     if ($openBracket && $line =~ ';')
+                    #     {
+                    #         $openBracket = FALSE;
+                    #     }
+                    # }
+
+                    my $openBracket = FALSE;
+                    while (my $line = <$fh>)
+                    {
+                        if ($line =~ $lineMatch && ($lineNotMatch eq "" || $line !~ $lineNotMatch))
+                        {
+                            if (!$settingsInserted)
+                            {
+                                print $out $settingsLine;
+                                $settingsInserted = TRUE;
+                                print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+                            }
+                            
+                            $openBracket = TRUE;                            
+                        }
+
+                        if ($openBracket)
+                        {
+                            print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+                        }
+                        else
+                        {
+                            print $out $line;
+                        }
+                        
+                        if ($openBracket && $line =~ ';')
+                        {
+                            $openBracket = FALSE;
+                        }
+                    }
+
+                    close $fh;
+                    close $out;
+                    if (!$settingsInserted)
+                    {
+                        # delete the file
+                        unlink $outFile;
+                    }
+                    
+                    # delete the _copy file
+                    unlink $phpFile;
+                }
+                
+                @files = File::Find::Rule->file()
+                    ->name("*.php")
                     ->extras({ follow => 1 })
-                    ->in($documentRoot);
+                    ->in("$workingFolder/wwwroot");
                 if (@files > 0)
                 {
-                    # settings.php is probably a common name and site detection should be improved
-                    $siteType = "drupal";
-                    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Searching for Drupal site found\n"); }
-                    my $originalConfig = @files[0];                    
-                    `php read_drupal_settings.php "$originalConfig" "$workingFolder/config-out.txt";`;
-                    open my $originalConfig, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
-                    while (my $line = <$originalConfig>)
-                    {
-                        my @tempSplit = split('=', $line);
-                        my $tempValue = @tempSplit[1];
-                        chomp($tempValue);
-                        if ($line =~ /DB_NAME/)
-                        {
-                            $dbName = $tempValue;
-                        }
-                        if ($line =~ /DB_USER/)
-                        {
-                            $dbUser = $tempValue;
-                        }
-                        if ($line =~ /DB_PASSWORD/)
-                        {
-                            $dbPassword = $tempValue;
-                        }
-                        if ($line =~ /DB_HOST/)
-                        {
-                            $dbHost = $tempValue;
-                        }
-                        if ($line =~ /INCLUDED_FILES/)
-                        {
-                            @files = split /;/,$tempValue;
-                        }
-                    }
+                    &deployToSite($publishUrl, "$workingFolder/wwwroot", $userName, $userPWD, TRUE);
+                }                
+            # }
 
-                    my $strYesOrNo = '';
-                    # Munging
-                    while($strYesOrNo !~ /^\s*[YynN]\s*$/)
-                    {
-                        ilog_printf(1, "\n    Drupal site detected, would you like to automatically change the settings.php for [$strSiteName]? (Y/N):");
-                        chomp($strYesOrNo = <STDIN>);
-                        if ($strYesOrNo!~/^\s*[YynN]\s*$/)
-                        {
-                            ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);
-                        }
-                        elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
-                        {
-                            mkdir "$workingFolder/wwwroot";
-                            my @filesToCopy;                            
-                            my $lineMatch = qr/databases.*'default'.*'default'/;
-                            &getConfigFiles($documentRoot, $lineMatch, $workingFolder, \@files);
-                            @files = File::Find::Rule->file()
-                                ->name("*_copy")
-                                ->in("$workingFolder/wwwroot");
-                            my $settingsLine = "\$databases['default']['default']=array('driver'=>'mysql','database' =>'$rDatabase','username'=>'$rUsername','password'=>'$rPassword','host'=>'$rServer','port' => '','prefix' => '');\n";
-                            for my $phpFile (@files)
-                            {                        
-                                my $settingsInserted = FALSE;
-                                open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-                                my $outFile = $phpFile;
-                                $outFile =~ s/_copy//g;
-                                open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
-                                my $openBracket = FALSE;
-                                while (my $line = <$fh>)
-                                {
-                                    if ($line =~ /databases\['default'\]\['default'\]/)
-                                    {
-                                        if (!$settingsInserted)
-                                        {
-                                            print $out $settingsLine;                                        
-                                            $settingsInserted = TRUE;
-                                        }
+            # WORDPRESS
+            # if ($framework eq WORDPRESS)
+            # {
+            #     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: migrating Wordpress site: $documentRoot\n"); }
+            #     my $originalWpConfig = @files[0];
+            #     my $wpsubdir = $originalWpConfig;
+            #     my $documentRoot2 = quotemeta($documentRoot);
+            #     $wpsubdir =~ s/$documentRoot2//g;
+            #     $wpsubdir =~ s/wp-config.php//g;
+            
+            #     `php read_wp_settings.php "$originalWpConfig" "$workingFolder/config-out.txt";`;
+            #     open my $originalWpConfig, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
+            #     while (my $line = <$originalWpConfig>)
+            #     {
+            #         my @tempSplit = split('=', $line);
+            #         my $tempValue = @tempSplit[1];
+            #         chomp($tempValue);
+            #         if ($line =~ /DB_NAME/)
+            #         {
+            #             $dbName = $tempValue;
+            #         }
+            #         if ($line =~ /DB_USER/)
+            #         {
+            #             $dbUser = $tempValue;
+            #         }
+            #         if ($line =~ /DB_PASSWORD/)
+            #         {
+            #             $dbPassword = $tempValue;
+            #         }
+            #         if ($line =~ /DB_HOST/)
+            #         {
+            #             $dbHost = $tempValue;
+            #         }
+            #         if ($line =~ /WP_SITEURL/)
+            #         {
+            #             $wpSiteurl = $tempValue;
+            #         }
+            #         if ($line =~ /INCLUDED_FILES/)
+            #         {
+            #             @files = split /;/,$tempValue;
+            #         }
+            #     }
 
-                                        $openBracket = TRUE;
-                                    }
-                                    
-                                    if ($openBracket)
-                                    {
-                                        print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
-                                    }
-                                    else
-                                    {
-                                        print $out $line;
-                                    }
+            #     my $strYesOrNo = '';
+            #     # Munging
+            #     while($strYesOrNo !~ /^\s*[YynN]\s*$/)
+            #     {
+            #         ilog_printf(1, "\n    Wordpress site detected, would you like to automatically change the wp-config.php for [$strSiteName]? (Y/N):");
+            #         chomp($strYesOrNo = <STDIN>);
+            #         if ($strYesOrNo!~/^\s*[YynN]\s*$/)
+            #         {
+            #             ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);
+            #         }
+            #         elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
+            #         {
+            #             mkdir "$workingFolder/wwwroot";
+            #             my @filesToCopy;                        
+            #             my $lineMatch = qr/define.*'DB_NAME'|define.*'DB_USER'|define.*'DB_PASSWORD'|define.*'DB_HOST'|define.*'WP_CONTENT_DIR'/;
+            #             &getConfigFiles($documentRoot, $lineMatch, $workingFolder, \@files);                                                                        
+            #             @files = File::Find::Rule->file()
+            #                 ->name("*_copy")                            
+            #                 ->in("$workingFolder/wwwroot");
+            #             my $settingsLine = "define('DB_NAME', '$rDatabase');\ndefine('DB_USER', '$rUsername');\ndefine('DB_PASSWORD', '$rPassword');"
+            #                 . "\ndefine('DB_HOST', '$rServer');\ndefine('WP_HOME','${destinationAppUrl}${wpsubdir}'); \ndefine('WP_SITEURL','${destinationAppUrl}/${wpsubdir}');\n";
+            #             for my $phpFile (@files)
+            #             {                        
+            #                 my $settingsInserted = FALSE;
+            #                 open my $fh, '<', $phpFile or die "Failed to open $_: $!";
+            #                 my $outFile = $phpFile;
+            #                 $outFile =~ s/_copy//g;
+            #                 open my $out, '>', $outFile or die "Can't write to $outFile file: $!";                        
+            #                 while (my $line = <$fh>)
+            #                 {
+            #                     if ($line =~ /define.*'DB_NAME'/ || $line =~ /define.*'DB_USER'/ || $line =~ /define.*'DB_PASSWORD'/ || $line =~ /define.*'DB_HOST'/ || $line =~ /define.*'WP_CONTENT_DIR'/)
+            #                     {
+            #                         if (!$settingsInserted)
+            #                         {
+            #                             print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+            #                             print $out $settingsLine;
+            #                             $settingsInserted = TRUE;
+            #                         }
+            #                         else
+            #                         {
+            #                             print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+            #                         }
+            #                     }
+            #                     else
+            #                     {
+            #                         print $out $line;
+            #                     }
+            #                 }
 
-                                    if ($openBracket && $line =~ ';')
-                                    {
-                                        $openBracket = FALSE;
-                                    }                                
-                                }
+            #                 close $fh;
+            #                 close $out;
+            #                 if (!$settingsInserted)
+            #                 {
+            #                     # delete the file
+            #                     unlink $outFile;
+            #                 }
+            
+            #                 # delete the _copy file
+            #                 unlink $phpFile;
+            #             }
+            
+            #             @files = File::Find::Rule->file()
+            #                 ->name("*.php")
+            #                 ->extras({ follow => 1 })
+            #                 ->in("$workingFolder/wwwroot");
+            #             if (@files > 0)
+            #             {
+            #                 &deployToSite($publishUrl, "$workingFolder/wwwroot", $userName, $userPWD, TRUE);
+            #             }
+            #         }
+            #     }
+            # }
+            
+            # if ($framework eq DRUPAL)
+            # {
+            #     # settings.php is probably a common name and site detection should be improved
+            #     $siteType = "drupal";
+            #     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: migrating Drupal site: $documentRoot\n"); }
+            #     my $originalConfig = @files[0];                    
+            #     `php read_drupal_settings.php "$originalConfig" "$workingFolder/config-out.txt";`;
+            #     open my $originalConfig, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
+            #     while (my $line = <$originalConfig>)
+            #     {
+            #         my @tempSplit = split('=', $line);
+            #         my $tempValue = @tempSplit[1];
+            #         chomp($tempValue);
+            #         if ($line =~ /DB_NAME/)
+            #         {
+            #             $dbName = $tempValue;
+            #         }
+            #         if ($line =~ /DB_USER/)
+            #         {
+            #             $dbUser = $tempValue;
+            #         }
+            #         if ($line =~ /DB_PASSWORD/)
+            #         {
+            #             $dbPassword = $tempValue;
+            #         }
+            #         if ($line =~ /DB_HOST/)
+            #         {
+            #             $dbHost = $tempValue;
+            #         }
+            #         if ($line =~ /INCLUDED_FILES/)
+            #         {
+            #             @files = split /;/,$tempValue;
+            #         }
+            #     }
 
-                                close $fh;
-                                close $out;
-                                if (!$settingsInserted)
-                                {
-                                    # delete the file
-                                    unlink $outFile;
-                                }
-                                
-                                # delete the _copy file
-                                # unlink $phpFile;
-                            }
-                            
-                            @files = File::Find::Rule->file()
-                                ->name("*.php")
-                                ->in("$workingFolder/wwwroot");
-                            if (@files > 0)
-                            {
-                                &deployToSite($publishUrl, "$workingFolder/wwwroot", $userName, $userPWD, TRUE);
-                            }
-                        }
-                    }
-                }
-            }
+            #     my $strYesOrNo = '';
+            #     # Munging
+            #     while($strYesOrNo !~ /^\s*[YynN]\s*$/)
+            #     {
+            #         ilog_printf(1, "\n    Drupal site detected, would you like to automatically change the settings.php for [$strSiteName]? (Y/N):");
+            #         chomp($strYesOrNo = <STDIN>);
+            #         if ($strYesOrNo!~/^\s*[YynN]\s*$/)
+            #         {
+            #             ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);
+            #         }
+            #         elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
+            #         {
+            #             mkdir "$workingFolder/wwwroot";
+            #             my @filesToCopy;                            
+            #             my $lineMatch = qr/databases.*'default'.*'default'/;
+            #             &getConfigFiles($documentRoot, $lineMatch, $workingFolder, \@files);
+            #             @files = File::Find::Rule->file()
+            #                 ->name("*_copy")
+            #                 ->in("$workingFolder/wwwroot");
+            #             my $settingsLine = "\$databases['default']['default']=array('driver'=>'mysql','database' =>'$rDatabase','username'=>'$rUsername','password'=>'$rPassword','host'=>'$rServer','port' => '','prefix' => '');\n";
+            #             for my $phpFile (@files)
+            #             {                        
+            #                 my $settingsInserted = FALSE;
+            #                 open my $fh, '<', $phpFile or die "Failed to open $_: $!";
+            #                 my $outFile = $phpFile;
+            #                 $outFile =~ s/_copy//g;
+            #                 open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
+            #                 my $openBracket = FALSE;
+            #                 while (my $line = <$fh>)
+            #                 {
+            #                     if ($line =~ /databases\['default'\]\['default'\]/)
+            #                     {
+            #                         if (!$settingsInserted)
+            #                         {
+            #                             print $out $settingsLine;                                        
+            #                             $settingsInserted = TRUE;
+            #                         }
 
-            if (!(defined $siteType and length $siteType))
-            {
-                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Searching for Joomla site configuration.php in: $documentRoot\n"); }
-                # JOOMLA
-                @files = File::Find::Rule->file()
-                    ->name("configuration.php")
-                    ->extras({ follow => 1 })
-                    ->in($documentRoot);
-                if (@files > 0)
-                {
-                    # configuration.php is probably a common name and site detection should be improved
-                    $siteType = "joomla";
-                    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Searching for Joomla site found\n"); }
-                    my $originalConfig = @files[0];
-                    `php read_joomla_settings.php "$originalConfig" "$workingFolder/config-out.txt";`;
-                    open my $originalConfig, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
-                    while (my $line = <$originalConfig>)
-                    {
-                        my @tempSplit = split('=', $line);
-                        my $tempValue = @tempSplit[1];
-                        chomp($tempValue);
-                        if ($line =~ /DB_NAME/)
-                        {
-                            $dbName = $tempValue;
-                        }
-                        if ($line =~ /DB_USER/)
-                        {
-                            $dbUser = $tempValue;
-                        }
-                        if ($line =~ /DB_PASSWORD/)
-                        {
-                            $dbPassword = $tempValue;
-                        }
-                        if ($line =~ /DB_HOST/)
-                        {
-                            $dbHost = $tempValue;
-                        }
-                        if ($line =~ /INCLUDED_FILES/)
-                        {
-                            @files = split /;/,$tempValue;
-                        }
-                    }
+            #                         $openBracket = TRUE;
+            #                     }
+            
+            #                     if ($openBracket)
+            #                     {
+            #                         print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+            #                     }
+            #                     else
+            #                     {
+            #                         print $out $line;
+            #                     }
 
-                    my $strYesOrNo = '';
-                    # Munging
-                    while($strYesOrNo !~ /^\s*[YynN]\s*$/)
-                    {
-                        ilog_printf(1, "\n    Joomla site detected, would you like to automatically change the settings.php for [$strSiteName]? (Y/N):");
-                        chomp($strYesOrNo = <STDIN>);
-                        if ($strYesOrNo!~/^\s*[YynN]\s*$/)
-                        {
-                            ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);
-                        }
-                        elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
-                        {                            
-                            mkdir "$workingFolder/wwwroot";
-                            my @filesToCopy;                            
-                            for my $phpFile (@files)
-                            {
-                                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: JOOMLA: modifying $phpFile\n"); }
-                                open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-                                my $filecopied = FALSE;
-                                while (my $line = <$fh>)
-                                {
-                                    if ($line =~ /\$db\s*=/ && !$filecopied)
-                                    {
-                                        # resolve symlinks
-                                        my $documentRoot2 = quotemeta($documentRoot);
-                                        if ($phpFile !~ /$documentRoot2/)
-                                        {
-                                            my $baseFile = basename($phpFile);
-                                            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Relocating phpFile: $phpFile (basename: $baseFile | documentRoot: $documentRoot)\n"); }
-                                            # it is not under documentRoot, let's try to locate it under document root.
-                                            my @docrootfiles = File::Find::Rule->file()
-                                                ->name($baseFile)
-                                                ->extras({ follow => 1 })
-                                                ->in($documentRoot);
-                                            
-                                            if (@docrootfiles > 0)
-                                            {
-                                                my $file0 = $docrootfiles[0];                                                
-                                                $phpFile = $file0;
-                                            } 
-                                            elsif (@docrootfiles > 1) {}# this is a bug...
-                                        }
+            #                     if ($openBracket && $line =~ ';')
+            #                     {
+            #                         $openBracket = FALSE;
+            #                     }                                
+            #                 }
 
-                                        my $newName = $phpFile;
-                                        $newName =~ s/$documentRoot2//g;
-                                        $newName =~ s/^\///g;
-                                        my $abPath = abs_path($phpFile);
-                                        my $dest = "$workingFolder/wwwroot/${newName}_copy";
-                                        my $destdirname  = dirname($dest);
-                                        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Copying phpFile: From: $abPath | To: $dest\n"); }
-                                        if (! -d $destdirname)
-                                        {
-                                            my $dirs = eval { mkpath($destdirname) };
-                                            die "Failed to create $destdirname: $@\n" unless $dirs;
-                                        }
+            #                 close $fh;
+            #                 close $out;
+            #                 if (!$settingsInserted)
+            #                 {
+            #                     # delete the file
+            #                     unlink $outFile;
+            #                 }
+            
+            #                 # delete the _copy file
+            #                 # unlink $phpFile;
+            #             }
+            
+            #             @files = File::Find::Rule->file()
+            #                 ->name("*.php")
+            #                 ->in("$workingFolder/wwwroot");
+            #             if (@files > 0)
+            #             {
+            #                 &deployToSite($publishUrl, "$workingFolder/wwwroot", $userName, $userPWD, TRUE);
+            #             }
+            #         }
+            #     }
+            # }
 
-                                        File::Copy::copy($abPath, $dest) or die "Failed to copy $abPath: $!\n";;
-                                        $filecopied = TRUE;
-                                    }
-                                }
-                            }
-                            
-                            @files = File::Find::Rule->file()
-                                ->name("*_copy")
-                                ->in("$workingFolder/wwwroot");
-                            my $settingsLine = "public \$db = '$rDatabase';\npublic \$user = '$rUsername';\npublic \$password = '$rPassword';\npublic \$host = '$rServer';\n";
-                            for my $phpFile (@files)
-                            {
-                                my $settingsInserted = FALSE;
-                                open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-                                my $outFile = $phpFile;
-                                $outFile =~ s/_copy//g;
-                                open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
-                                my $openBracket = FALSE;
-                                while (my $line = <$fh>)
-                                {
-                                    if ($line =~ /\$db\s*=/ || $line =~ /\$user\s*=/ || $line =~ /\$password\s*=/ || $line =~ /\$host\s*=/)
-                                    {
-                                        if (!$settingsInserted)
-                                        {
-                                            print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
-                                            print $out $settingsLine;
-                                            $settingsInserted = TRUE;
-                                        }
-                                        else
-                                        {
-                                            print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
-                                        }
-                                    }
-                                    else
-                                    {
-                                        print $out $line;
-                                    }
-                                }
+            # if ($framework eq JOOMLA)
+            # {
+            #     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: migrating Joomla site: $documentRoot\n"); }
+            #     # configuration.php is probably a common name and site detection should be improved                
+            #     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Searching for Joomla site found\n"); }
+            #     my $originalConfig = @files[0];
+            #     `php read_joomla_settings.php "$originalConfig" "$workingFolder/config-out.txt";`;
+            #     open my $originalConfig, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
+            #     while (my $line = <$originalConfig>)
+            #     {
+            #         my @tempSplit = split('=', $line);
+            #         my $tempValue = @tempSplit[1];
+            #         chomp($tempValue);
+            #         if ($line =~ /DB_NAME/)
+            #         {
+            #             $dbName = $tempValue;
+            #         }
+            #         if ($line =~ /DB_USER/)
+            #         {
+            #             $dbUser = $tempValue;
+            #         }
+            #         if ($line =~ /DB_PASSWORD/)
+            #         {
+            #             $dbPassword = $tempValue;
+            #         }
+            #         if ($line =~ /DB_HOST/)
+            #         {
+            #             $dbHost = $tempValue;
+            #         }
+            #         if ($line =~ /INCLUDED_FILES/)
+            #         {
+            #             @files = split /;/,$tempValue;
+            #         }
+            #     }
 
-                                close $fh;
-                                close $out;
-                                if (!$settingsInserted)
-                                {
-                                    # delete the file
-                                    unlink $outFile;
-                                }
-                                
-                                # delete the _copy file
-                                # unlink $phpFile;
-                            }
-                            
-                            @files = File::Find::Rule->file()
-                                ->name("*.php")
-                                ->in("$workingFolder/wwwroot");
-                            if (@files > 0)
-                            {
-                                &deployToSite($publishUrl, "$workingFolder/wwwroot", $userName, $userPWD, TRUE);
-                            }
-                        }
-                    }
-                }
-            }
+            # my $strYesOrNo = '';
+            # Munging
+            # while($strYesOrNo !~ /^\s*[YynN]\s*$/)
+            # {
+            #     ilog_printf(1, "\n    Joomla site detected, would you like to automatically change the settings.php for [$strSiteName]? (Y/N):");
+            #     chomp($strYesOrNo = <STDIN>);
+            #     if ($strYesOrNo!~/^\s*[YynN]\s*$/)
+            #     {
+            #         ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);
+            #     }
+            #     elsif ($strYesOrNo=~/^\s*[Yy]\s*$/)
+            #     {                            
+            #         mkdir "$workingFolder/wwwroot";
+            #         my @filesToCopy;                            
+            #         for my $phpFile (@files)
+            #         {
+            #             if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: JOOMLA: modifying $phpFile\n"); }
+            #             open my $fh, '<', $phpFile or die "Failed to open $_: $!";
+            #             my $filecopied = FALSE;
+            #             while (my $line = <$fh>)
+            #             {
+            #                 if ($line =~ /\$db\s*=/ && !$filecopied)
+            #                 {
+            #                     # resolve symlinks
+            #                     my $documentRoot2 = quotemeta($documentRoot);
+            #                     if ($phpFile !~ /$documentRoot2/)
+            #                     {
+            #                         my $baseFile = basename($phpFile);
+            #                         if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Relocating phpFile: $phpFile (basename: $baseFile | documentRoot: $documentRoot)\n"); }
+            #                         # it is not under documentRoot, let's try to locate it under document root.
+            #                         my @docrootfiles = File::Find::Rule->file()
+            #                             ->name($baseFile)
+            #                             ->extras({ follow => 1 })
+            #                             ->in($documentRoot);
+            
+            #                         if (@docrootfiles > 0)
+            #                         {
+            #                             my $file0 = $docrootfiles[0];                                                
+            #                             $phpFile = $file0;
+            #                         } 
+            #                         elsif (@docrootfiles > 1) {}# this is a bug...
+            #                     }
 
+            #                     my $newName = $phpFile;
+            #                     $newName =~ s/$documentRoot2//g;
+            #                     $newName =~ s/^\///g;
+            #                     my $abPath = abs_path($phpFile);
+            #                     my $dest = "$workingFolder/wwwroot/${newName}_copy";
+            #                     my $destdirname  = dirname($dest);
+            #                     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Copying phpFile: From: $abPath | To: $dest\n"); }
+            #                     if (! -d $destdirname)
+            #                     {
+            #                         my $dirs = eval { mkpath($destdirname) };
+            #                         die "Failed to create $destdirname: $@\n" unless $dirs;
+            #                     }
+
+            #                     File::Copy::copy($abPath, $dest) or die "Failed to copy $abPath: $!\n";;
+            #                     $filecopied = TRUE;
+            #                 }
+            #             }
+            #         }
+            
+            #         @files = File::Find::Rule->file()
+            #             ->name("*_copy")
+            #             ->in("$workingFolder/wwwroot");
+            #         my $settingsLine = "public \$db = '$rDatabase';\npublic \$user = '$rUsername';\npublic \$password = '$rPassword';\npublic \$host = '$rServer';\n";
+            #         for my $phpFile (@files)
+            #         {
+            #             my $settingsInserted = FALSE;
+            #             open my $fh, '<', $phpFile or die "Failed to open $_: $!";
+            #             my $outFile = $phpFile;
+            #             $outFile =~ s/_copy//g;
+            #             open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
+            #             my $openBracket = FALSE;
+            #             while (my $line = <$fh>)
+            #             {
+            #                 if ($line =~ /\$db\s*=/ || $line =~ /\$user\s*=/ || $line =~ /\$password\s*=/ || $line =~ /\$host\s*=/)
+            #                 {
+            #                     if (!$settingsInserted)
+            #                     {
+            #                         print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+            #                         print $out $settingsLine;
+            #                         $settingsInserted = TRUE;
+            #                     }
+            #                     else
+            #                     {
+            #                         print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+            #                     }
+            #                 }
+            #                 else
+            #                 {
+            #                     print $out $line;
+            #                 }
+            #             }
+
+            #             close $fh;
+            #             close $out;
+            #             if (!$settingsInserted)
+            #             {
+            #                 # delete the file
+            #                 unlink $outFile;
+            #             }
+            
+            #             # delete the _copy file
+            #             # unlink $phpFile;
+            #         }
+            
+            #         @files = File::Find::Rule->file()
+            #             ->name("*.php")
+            #             ->in("$workingFolder/wwwroot");
+            #         if (@files > 0)
+            #         {
+            #             &deployToSite($publishUrl, "$workingFolder/wwwroot", $userName, $userPWD, TRUE);
+            #         }
+            #     }
+            # }                 
+# } ??????       
             my $returnCode = -1;
             my $database;
             my $password;
@@ -972,31 +1195,32 @@ sub pars_PublishSite
             # No database to publish
             $publishSuccess = TRUE;
         }
-    }       
+    }
 }
 
 sub getConfigFiles
 {
     my $documentRoot = $_[0];
-    my $matchLine = $_[1];
-    my $workingFolder = $_[2];
-    my @files = @{$_[3]};    
+    my $lineMatch = $_[1];
+    my $lineNotMatch = $_[2];
+    my $workingFolder = $_[3];
+    my @files = @{$_[4]};    
     for my $phpFile (@files)
     {
         open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-        my $found = FALSE;
         my $filecopied = FALSE;
         while (my $line = <$fh>)
         {
-            if ($line =~ $matchLine && !$filecopied) # /databases.*'default'.*'default'/
+            if ($line =~ $lineMatch && ($lineNotMatch eq "" || $line !~ $lineNotMatch) && !$filecopied)
             {
                 # resolve symlinks
                 my $documentRoot2 = quotemeta($documentRoot);
+                # if the file is not under the document root, move it so it is.
                 if ($phpFile !~ /$documentRoot2/)
                 {
                     my $baseFile = basename($phpFile);
                     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Relocating phpFile: $phpFile (basename: $baseFile | documentRoot: $documentRoot)\n"); }
-                    # it is not under documentRoot, let's try to locate it under document root.
+                    # if it is not under documentRoot, try to locate it under document root.
                     my @docrootfiles = File::Find::Rule->file()
                         ->name($baseFile)
                         ->extras({ follow => 1 })
@@ -1007,7 +1231,8 @@ sub getConfigFiles
                         my $file0 = $docrootfiles[0];                                                
                         $phpFile = $file0;
                     }
-                    elsif (@docrootfiles > 1) {}# this is a bug...
+                    # BUGBUG: what if there is more than one file under the document root?
+                    # BUGBUG: what if it cannot be located under the document root?
                 }
 
                 my $newName = $phpFile;
@@ -1023,7 +1248,7 @@ sub getConfigFiles
                     die "Failed to create $destdirname: $@\n" unless $dirs;
                 }
 
-                File::Copy::copy($abPath, $dest) or die "Failed to copy $abPath: $!\n";;
+                File::Copy::copy($abPath, $dest) or die "Failed to copy $abPath: $!\n";
                 $filecopied = TRUE;
             }
         }
@@ -1267,7 +1492,6 @@ sub pars_Generate2D
         {
             my @splitPorts = split(':', $directiveValue);
             $portValue = $splitPorts[1];
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: PortValue is: $portValue\n"); }
             my $serverName = "EMPTY";
             my $lineContent;
             my $temp = $directiveValue;
@@ -1326,7 +1550,7 @@ sub pars_Generate2D
                         }
 
                         if($directiveName eq "ServerName")
-                        {                           
+                        {
                             $serverName = $directiveValue;
                         }
                     }
@@ -1357,25 +1581,25 @@ sub pars_Generate2D
             }
 
             $siteName = $serverName;
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: serverName is: $serverName\n"); }
-            if(&pars_siteSelected($serverName))
-            {
+            # ADRIANG: CHANGE SITE SELECTED FLOW:
+            # if(&pars_siteSelected($serverName))
+            # {
                 if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: processing selected site: $serverName\n"); }
                 &pars_setVirtualhost();             
-            }
-            else
-            {
-                while ($lineContent = <CONFIGHANDLE>)
-                {
-                    chomp($lineContent);
-                    $lineContent =~ s/^\s+//;
-                    $lineContent =~ s/\s+$//;
-                    if($lineContent =~ /^<\/VirtualHost>/)
-                    {
-                        last;
-                    }
-                }
-            }
+            # }
+            # else
+            # {
+            #     while ($lineContent = <CONFIGHANDLE>)
+            #     {
+            #         chomp($lineContent);
+            #         $lineContent =~ s/^\s+//;
+            #         $lineContent =~ s/\s+$//;
+            #         if($lineContent =~ /^<\/VirtualHost>/)
+            #         {
+            #             last;
+            #         }
+            #     }
+            # }
         }
         else
         {           
@@ -1433,40 +1657,40 @@ sub pars_Generate2D
     &pars_setHtaccess();
     my $o = 0;
     my $p = 0;
-    my $continue = 1;
-    for($p = $start;$p <=$rowCount; $p++)
-    {
-        $continue = 1;
-        for($o = 0; $o <= $rowDirCount; $o++)
-        {   
-            if($array[$p][SITENAME] eq $arrayDir[$o][SITENAME])
-            {
-                if($array[$p][DOCUMENTROOT] eq $arrayDir[$o][DIRECTORY])
-                {
-                    $continue = 0;
-                    $o = $rowDirCount;
-                    $o++;
-                }
-            }                   
-        }
+    my $continue = 1;    
+    # directory parsing, is this needed?
+    # for($p = $start;$p <=$rowCount; $p++)
+    # {
+    #     $continue = 1;
+    #     for($o = 0; $o <= $rowDirCount; $o++)
+    #     {   
+    #         if($array[$p][SITENAME] eq $arrayDir[$o][SITENAME])
+    #         {
+    #             if($array[$p][DOCUMENTROOT] eq $arrayDir[$o][DIRECTORY])
+    #             {
+    #                 $continue = 0;
+    #                 $o = $rowDirCount;
+    #                 $o++;
+    #             }
+    #         }                   
+    #     }
 
-        if($continue)
-        {
-            ++$rowDirCount;
-            $arrayDir[$rowDirCount][SITENAME] = $array[$p][SITENAME];
-            $arrayDir[$rowDirCount][DESTINATIONPATH] = $array[$p][DESTINATIONPATH];
-            $arrayDir[$rowDirCount][DESTINATIONPATH] =~ s/\\/\//g;
-            $arrayDir[$rowDirCount][DIRECTORY] = $array[$p][DOCUMENTROOT];
-            $arrayDir[$rowDirCount][DOCUMENTROOT] = $array[$p][DOCUMENTROOT];
-            $arrayDir[$rowDirCount][HOSTNAMELOOKUPS] = "Off";
-            $arrayDir[$rowDirCount][IDENTITYCHECK] = "Off";
-            $arrayDir[$rowDirCount][ALLOWOVERRIDE] = "All";
-            $arrayDir[$rowDirCount][ACCESSFILENAME] = $array[$p][ACCESSFILENAME];
-            $arrayDir[$rowDirCount][DEFAULTTYPE] = "text/plain";
-            $continue = 1;  
-        }    
-    }
-
+    #     if($continue)
+    #     {
+    #         ++$rowDirCount;
+    #         $arrayDir[$rowDirCount][SITENAME] = $array[$p][SITENAME];
+    #         $arrayDir[$rowDirCount][DESTINATIONPATH] = $array[$p][DESTINATIONPATH];
+    #         $arrayDir[$rowDirCount][DESTINATIONPATH] =~ s/\\/\//g;
+    #         $arrayDir[$rowDirCount][DIRECTORY] = $array[$p][DOCUMENTROOT];
+    #         $arrayDir[$rowDirCount][DOCUMENTROOT] = $array[$p][DOCUMENTROOT];
+    #         $arrayDir[$rowDirCount][HOSTNAMELOOKUPS] = "Off";
+    #         $arrayDir[$rowDirCount][IDENTITYCHECK] = "Off";
+    #         $arrayDir[$rowDirCount][ALLOWOVERRIDE] = "All";
+    #         $arrayDir[$rowDirCount][ACCESSFILENAME] = $array[$p][ACCESSFILENAME];
+    #         $arrayDir[$rowDirCount][DEFAULTTYPE] = "text/plain";
+    #         $continue = 1;  
+    #     }
+    # }
     # Start processing for Userdir directive
     # &pars_setUserdir();
     # Generate The Local user file to be used by the work items target module to create local users on the target box.
@@ -1478,8 +1702,12 @@ sub pars_Generate2D
     # Display the 2-Dimensional array corresponding to the site content.
     # &pars_printArraysite();
     # Display the 2-Dimensional array corresponding to the Directory content.
-    # &pars_printArraydir();
+    # &pars_printArraydir();    
+    # if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: GEN2D last index of array is: $#array"); }
+    # this has the side effect of calling pars_siteHasValidFrameworkDb
+    # which populates the global variable $array MYSQL, FRAMEWORK, and CONFIGFILE entries
     &pars_CreateReadinessReport();
+    &pars_UploadPublishSettingsAllSites();
     return 1;
 }
 
@@ -2280,8 +2508,7 @@ sub pars_common2d
                             my @fileTmp;
                             my $Dcide = 1;
                             if($arrayDir[$rowDirCount][ALLOWOVERRIDE] eq "All")
-                            {
-                                
+                            {                                
                                 @fileTmp = ftp_checkFilePresence($arrayDir[$rowDirCount][DIRECTORY]);
                                 foreach(@fileTmp)
                                 {
@@ -4930,6 +5157,71 @@ sub pars_IPSelected
     return 0; 
 }
 
+# populates the $array global variable...
+sub pars_siteHasValidFrameworkDb
+{
+    my $i = shift;
+    my $documentRoot = $array[$i][DOCUMENTROOT];
+    my $strSiteName = $array[$i][SITENAME];
+    my $framework = "";
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: pars_siteHasValidFrameworkDb [i:$i][strSiteName:$strSiteName][documentRoot:$documentRoot]\n"); }
+    if (!(-d $documentRoot))
+    {
+        # TODO: why is this empty??
+        return;
+    }
+
+    my @files = File::Find::Rule->file()
+                ->name("wp-config.php")
+                ->extras({ follow => 1 })
+                ->in($documentRoot);
+    if (@files > 0)
+    {
+        $framework = WORDPRESS;
+        $array[$i][FRAMEWORK] = $framework;
+    }
+    else
+    {
+        @files = File::Find::Rule->file()
+            ->name("settings.php")
+            ->extras({ follow => 1 })
+            ->in($documentRoot);
+        if (@files > 0)
+        {
+            $framework = DRUPAL;
+            $array[$i][FRAMEWORK] = $framework;
+        }
+        else
+        {
+            @files = File::Find::Rule->file()
+                ->name("configuration.php")
+                ->extras({ follow => 1 })
+                ->in($documentRoot);
+            if (@files > 0)
+            {
+                $framework = JOOMLA;
+                $array[$i][FRAMEWORK] = $framework;        
+            }
+        }
+    }
+    
+    if ($framework)
+    {
+        my $strYesOrNo =" ";
+        while($strYesOrNo!~/^\s*[YynN]\s*$/)
+        {
+            ilog_printf(1, "\n    $framework site detected, would you like to automatically create and migrate the database [$strSiteName]? (Y/N):");
+            chomp($strYesOrNo = <STDIN>);
+            ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+        }
+        
+        $array[$i][MYSQL] = ($strYesOrNo=~/^\s*[Yy]\s*$/);
+        # TODO: more accurate way to make sure that this is the root config
+        $array[$i][CONFIGFILE] = $files[0];
+    }
+}
+
 #######################################################################################################################
 #
 # Method Name   : pars_siteHasDb
@@ -4986,6 +5278,36 @@ sub pars_siteHasDb
     return 0; 
 }
 
+#-------------------------------------------------------------------------
+# Method Name       :        pars_AskSelectSites
+# Description       :        The method asks the user if they want to migrate
+#                            the site.
+# Input             :        Sitename
+# Return Value      :        boolean
+#-------------------------------------------------------------------------
+sub pars_AskSelectSites
+{
+    my $strYesOrNo = "";
+    my $strSiteName = shift;
+    my $documentRoot = shift;
+    my $promptyn;    
+    ilog_print(1,"\n\n");
+    ui_printline();
+    ilog_printf(MSG_SITE_DETAILS,$strSiteName);
+    ui_printline();
+    ilog_printf(MSG_SOURCE_PATH, $documentRoot);
+    $strYesOrNo =" ";
+    while($strYesOrNo!~/^\s*[YynN]\s*$/)
+    {           
+        ilog_printf(MSG_MIGRATE_SITE, $strSiteName);
+        chomp($strYesOrNo = <STDIN>);
+        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO) 
+            if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+    }
+    return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
+    return 1; # site was selected
+}
+
 #######################################################################################################################
 #
 # Method Name   : pars_siteSelected
@@ -5005,7 +5327,6 @@ sub pars_siteHasDb
 sub pars_siteSelected
 {
     my $siteName = shift;
-    print "\nDEBUG: CHECKING SITESELECTED ($ResourceFile): $siteName";
     $siteName =~ s/^\s+//;
     $siteName =~ s/\s+$//;
     my @tmpArray;
@@ -6474,7 +6795,6 @@ sub pars_setHtaccess
                     {
                         ilog_setLogInformation('INT_INFO',$htaccessfilename,MSG_FILE_OPEN,'');
                     }
-                    
                     ++$rowDirCount;                    
                     $arrayDir[$rowDirCount][SITENAME] = $array[$Indexi][SITENAME];
                     $arrayDir[$rowDirCount][ACCESSFILENAME] = $array[$Indexi][ACCESSFILENAME];
@@ -8231,7 +8551,6 @@ sub pars_setHtaccess
                         {
                             ilog_setLogInformation('INT_INFO',$htaccessfilename,MSG_FILE_OPEN,'');
                         }
-                        
                         ++$rowDirCount;                        
                         $arrayDir[$rowDirCount][SITENAME] = $array[$Indexi][SITENAME];
                         $arrayDir[$rowDirCount][DIRECTORY] = $finalPath;
@@ -8473,7 +8792,7 @@ sub pars_setUserdir
                     my $Indexj = 0;
                     my $tempPath = $array[$i][DESTINATIONPATH];
                     $tempPath =~ s/\\$//;
-                    # Check for the keyword's disabled and enabled as below                    
+                    # Check for the keyword's disabled and enabled as below
                     ++$rowDirCount;
                     $arrayDir[$rowDirCount][SITENAME] = $array[$i][SITENAME];
                     chomp($arry[1]);
