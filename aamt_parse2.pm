@@ -25,6 +25,7 @@ use XML::SAX;
 use MIME::Base64;
 use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
 use File::Find::Rule;
+use File::Find;
 use File::Basename;
 use Cwd 'abs_path';
 use File::Path;
@@ -182,15 +183,6 @@ sub pars_CreateReadinessReport
     {
         $start = 1;
     }
-    # if(&pars_siteSelected("Default Web Site"))
-    # {
-    #     $start = 0;
-    # }
-    # else
-    # {
-    #     $start = 1;
-    # }    
-    
     my $sIndex = 0;
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: starting checking sites for selection"); }
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: rowCount: $rowCount"); }
@@ -206,10 +198,6 @@ sub pars_CreateReadinessReport
                 next;
             }
         }
-        # if(!&pars_siteSelected($mySiteName))
-        # {
-        #     continue;
-        # }
 
         my %rSite = ();
         my @defaultDocs;
@@ -219,13 +207,33 @@ sub pars_CreateReadinessReport
         $rSite{"AppPoolName"} = "DefaultLinuxAppPool";
         $rSite{"ServerName"} = $rComputername;
         $rSite{"SiteName"} = $mySiteName;
+
+        # size of the site
+        my $size;
+        find(sub{ -f and ( $size += -s ) }, $array[$i][DOCUMENTROOT] );
+        $size = sprintf("%.02f",$size / 1024 / 1024);
+        $rSite{"SizeInMb"} = $size;
+
         # if (&pars_siteHasDb($mySiteName))
         # populates $array global variable
         &pars_siteHasValidFrameworkDb($i);
         if ($array[$i][MYSQL])
         {
+            (my $dbName, my $dbUser, my $dbPassword, my $dbHost) = &ReadDbSettingsForFramework($array[$i][FRAMEWORK], $array[$i][CONFIGFILE]);
+
             $database{"ConnectionStringName"} = "MySQLConnection";
             $database{"ProviderName"} = "MySql.Data.MySqlClient";
+            # size of the database
+            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: MYSQL SIZE:\nmysql -N -B -h $dbHost -u $dbUser -p'$dbPassword' $dbName -e 'select dbsize from (SELECT table_schema, sum( data_length + index_length ) / 1024 / 1024 dbsize FROM information_schema.TABLES GROUP BY table_schema) as s where table_schema=$dbName;'"); }
+            my $sizeInMb = `mysql -N -B -h $dbHost -u $dbUser -p'$dbPassword' $dbName -e 'select dbsize from (SELECT table_schema, sum( data_length + index_length ) / 1024 / 1024 "dbsize" FROM information_schema.TABLES GROUP BY table_schema) as s where table_schema="$dbName";'`;
+            # my $dbSize;
+            # find(sub{ -f and ( $dbSize += -s ) }, $array[$i][DOCUMENTROOT] );
+            # $dbSize = sprintf("%.02f", $dbSize / 1024 / 1024);
+            # $database{"SizeInMb"} = $dbSize;
+            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: MYSQL SIZE:\nmysql -N -B -h $dbHost -u $dbUser -p'$dbPassword' $dbName -e 'select * from (SELECT table_schema, sum( data_length + index_length ) / 1024 / 1024 dbsize FROM information_schema.TABLES GROUP BY table_schema) as s where table_schema=$dbName;'"); }
+            $sizeInMb =~ s/\n//g;
+            $database{"SizeInMb"} = "$sizeInMb";
+            # SELECT table_schema "Data Base Name", sum( data_length + index_length ) / 1024 / 1024 "Data Base Size in MB" FROM information_schema.TABLES GROUP BY table_schema;
             $databases[0] = \%database;
             $rSite{"Databases"} = \@databases;
         }
@@ -468,6 +476,77 @@ sub pars_UploadPublishSettings
 
     return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
     &pars_PublishSite($strSiteName, $documentRoot, $strPublishSettings, $mySQL, $framework, $configFile);
+}
+
+# TODO: RE-FACTOR THIS INTO EVERYWHERE
+sub ReadDbSettingsForFramework
+{
+    my $framework = shift;
+    my $configFile = shift;
+
+    my $dbName;
+    my $dbUser;
+    my $dbPassword;
+    my $dbHost;
+
+    my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+    #get session name
+    my $strSessionName = &ilog_getSessionName();
+    #form the complete working folder
+    my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+
+    if ($framework eq WORDPRESS)
+    {
+        `php read_wp_settings.php "$configFile" "$workingFolder/config-out.txt";`;        
+    }
+    elsif ($framework eq DRUPAL)
+    {
+        `php read_drupal_settings.php "$configFile" "$workingFolder/config-out.txt";`;        
+    }
+    elsif ($framework eq JOOMLA)
+    {
+        `php read_joomla_settings.php "$configFile" "$workingFolder/config-out.txt";`;        
+    }
+    else
+    {
+        # we have a bug...
+        ilog_print(1,"\nERROR: Unrecognized framework: $framework\n");
+        return 0;
+    }
+
+    open my $configFile, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
+    while (my $line = <$configFile>)
+    {
+        my @tempSplit = split('=', $line);
+        my $tempValue = @tempSplit[1];
+        chomp($tempValue);
+        if ($line =~ /DB_NAME/)
+        {
+            $dbName = $tempValue;
+        }
+        if ($line =~ /DB_USER/)
+        {
+            $dbUser = $tempValue;
+        }
+        if ($line =~ /DB_PASSWORD/)
+        {
+            $dbPassword = $tempValue;
+        }
+        if ($line =~ /DB_HOST/)
+        {
+            $dbHost = $tempValue;
+        }
+        # if ($line =~ /WP_SITEURL/)
+        # {
+        #     $wpSiteurl = $tempValue;
+        # }
+        if ($line =~ /INCLUDED_FILES/)
+        {
+            @files = split /;/,$tempValue;
+        }
+    }
+    
+    return ($dbName, $dbUser, $dbPassword, $dbHost);
 }
 
 sub pars_PublishSite
