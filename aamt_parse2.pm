@@ -29,7 +29,7 @@ use File::Find;
 use File::Basename;
 use Cwd 'abs_path';
 use File::Path;
-my $DEBUG_MODE = 1;
+my $DEBUG_MODE = 0;
 
 #----------------------------------------------------------------------------------------------------------------------
 #                                          Global variables used by this module
@@ -214,12 +214,14 @@ sub pars_CreateReadinessReport
         $size = sprintf("%.02f",$size / 1024 / 1024);
         $rSite{"SizeInMb"} = $size;
 
-        # if (&pars_siteHasDb($mySiteName))
         # populates $array global variable
         &pars_siteHasValidFrameworkDb($i);
         if ($array[$i][MYSQL])
-        {
-            (my $dbName, my $dbUser, my $dbPassword, my $dbHost) = &ReadDbSettingsForFramework($array[$i][FRAMEWORK], $array[$i][CONFIGFILE]);
+        {            
+            my $dbName = $array[$i][DB_NAME];
+            my $dbUser = $array[$i][DB_USER];
+            my $dbHost = $array[$i][DB_HOST];
+            my $dbPassword = $array[$i][DB_PASS];
 
             $database{"ConnectionStringName"} = "MySQLConnection";
             $database{"ProviderName"} = "MySql.Data.MySqlClient";
@@ -363,64 +365,12 @@ sub pars_UploadPublishSettingsAllSites
             if (!$fileFound);
         close PUBLISH_HANDLE;        
     }
-    
-    # while ($lineContent = <RECOVERYHANDLE>)
-    # {
-    #     # [SiteName] is the format
-    #     if($lineContent =~ /^\[/)
-    #     {
-    #         $lineContent =~ s/\[//;
-    #         $lineContent =~ s/\]//;
-    #         $lineContent =~ s/^\s+//;
-    #         $lineContent =~ s/\s+$//;
-    #         my $siteName = $lineContent;
-    #         # my $mySQL = FALSE;
-    #         my $documentRoot = '';
-    #         while ($lineContent = <RECOVERYHANDLE> and $lineContent !~ /^\[/)
-    #         {
-    #             # if($lineContent =~ /^MySQL/)
-    #             # {                   
-    #             #     if ($lineContent =~ 'yes')
-    #             #     {
-    #             #         $mySQL = TRUE;
-    #             #     }
-    #             # }
-    #             if($lineContent =~ /^DocumentRoot/)
-    #             {
-    #                 @tmpArray = split /=/,$lineContent;
-    #                 $documentRoot = $tmpArray[1];
-    #                 chomp($documentRoot);
-    #             }
-    #         }
-            
-    #         if ($lineContent =~ /^\[/)
-    #         {
-    #             # place the same line back onto the filehandle
-    #             seek(RECOVERYHANDLE, -length($lineContent), 1); 
-    #         }
-            
-    #         # look up the array indice corresponding to the site name in the global site array
-    #         my $sIndex = 0;            
-    #         for ($sIndex = 0; $sIndex < @array; $sIndex++)
-    #         {
-    #             if ($array[$sIndex][SITENAME] eq $siteName)
-    #             {
-    #                 last;
-    #             }
-    #         }
-    #         # what to do if $sIndex > @array size??
-
-    #         &pars_UploadPublishSettings($siteName, $documentRoot, $strPublishSettings, 
-    #                                     $array[$sIndex][MYSQL], $array[$sIndex][FRAMEWORK], $array[$sIndex][CONFIGFILE]);
-    #     }        
-    # }
-
+        
     for ($i = 0; $i <= $rowCount; $i++)
     {
         if ($array[$i][PUBLISH])
         {
-            &pars_UploadPublishSettings($array[$i][SITENAME], $array[$i][DOCUMENTROOT], $strPublishSettings, 
-                                        $array[$i][MYSQL], $array[$i][FRAMEWORK], $array[$i][CONFIGFILE]);
+            &pars_UploadPublishSettings($strPublishSettings, $i);
         }
     }
 
@@ -447,14 +397,11 @@ sub pars_UploadPublishSettingsAllSites
 
 sub pars_UploadPublishSettings
 {
-    my $strSiteName = shift;
-    my $documentRoot = shift;
     my $strPublishSettings = shift;
-    my $mySQL = shift;
-    my $framework = shift;
-    my $configFile = shift;
-    my $strYesOrNo = "";
-    
+    my $sIndex = shift;
+        
+    my $strSiteName = $array[$sIndex][SITENAME];
+    my $strYesOrNo = "";    
     ilog_print(1,"\n\n");
     ui_printline();
     ilog_printf(1,"[ $strSiteName ] - Site Publishing \n");
@@ -469,90 +416,16 @@ sub pars_UploadPublishSettings
     }
 
     return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
-    &pars_PublishSite($strSiteName, $documentRoot, $strPublishSettings, $mySQL, $framework, $configFile);
+    &pars_PublishSite($strPublishSettings, $sIndex);
 }
-
-# TODO: RE-FACTOR THIS INTO EVERYWHERE
-# sub ReadDbSettingsForFramework
-# {
-#     my $framework = shift;
-#     my $configFile = shift;
-
-#     my $dbName;
-#     my $dbUser;
-#     my $dbPassword;
-#     my $dbHost;
-
-#     my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-#     #get session name
-#     my $strSessionName = &ilog_getSessionName();
-#     #form the complete working folder
-#     my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
-
-#     if ($framework eq WORDPRESS)
-#     {
-#         `php read_wp_settings.php "$configFile" "$workingFolder/config-out.txt";`;        
-#     }
-#     elsif ($framework eq DRUPAL)
-#     {
-#         `php read_drupal_settings.php "$configFile" "$workingFolder/config-out.txt";`;        
-#     }
-#     elsif ($framework eq JOOMLA)
-#     {
-#         `php read_joomla_settings.php "$configFile" "$workingFolder/config-out.txt";`;        
-#     }
-#     else
-#     {
-#         # we have a bug...
-#         ilog_print(1,"\nERROR: Unrecognized framework: $framework\n");
-#         return 0;
-#     }
-
-#     open my $configFile, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
-#     while (my $line = <$configFile>)
-#     {
-#         my @tempSplit = split('=', $line);
-#         my $tempValue = @tempSplit[1];
-#         chomp($tempValue);
-#         if ($line =~ /DB_NAME/)
-#         {
-#             $dbName = $tempValue;
-#         }
-#         if ($line =~ /DB_USER/)
-#         {
-#             $dbUser = $tempValue;
-#         }
-#         if ($line =~ /DB_PASSWORD/)
-#         {
-#             $dbPassword = $tempValue;
-#         }
-#         if ($line =~ /DB_HOST/)
-#         {
-#             $dbHost = $tempValue;
-#         }
-#         # if ($line =~ /WP_SITEURL/)
-#         # {
-#         #     $wpSiteurl = $tempValue;
-#         # }
-#         if ($line =~ /INCLUDED_FILES/)
-#         {
-#             @files = split /;/,$tempValue;
-#         }
-#     }
-    
-#     return ($dbName, $dbUser, $dbPassword, $dbHost);
-# }
 
 sub pars_PublishSite
 {
-    my $strSiteName = shift;
-    my $documentRoot = shift;
-    my $rComputername = `hostname`;
     my $strPublishSettings = shift;
-    my $mySQL = shift;
-    my $framework = shift;
-    my $configFile = shift;
-
+    my $sIndex = shift;
+    my $strSiteName = $array[$sIndex][SITENAME];
+    my $documentRoot = $array[$sIndex][DOCUMENTROOT];
+    my $rComputername = `hostname`;
     $rComputername =~ s/\n//g;
     my $publishSuccess = FALSE;
     my $strYesOrNo =" ";
@@ -586,7 +459,6 @@ sub pars_PublishSite
                     $mySqlConnectionString = $dbs->{add}->{connectionString};                    
                 }
                 
-                if ($DEBUG_MODE) { print "\nDEBUG: site [$strSiteName] located in publishsettings\npublishUrl: $publishUrl\n userName: $userName\n userPWD: $userPWD\nMySQL: $mySQL\n"; }
                 last;
             }
         }
@@ -645,14 +517,18 @@ sub pars_PublishSite
     $publishSuccess = FALSE;
     while (!$publishSuccess)
     {
-        if ($mySQL)
+        if ($array[$sIndex][MYSQL])
         {
             # local settings read from config file
-            my $dbName;
-            my $dbUser;
-            my $dbPassword;
-            my $dbHost;
-            my $wpSiteurl;
+            my $dbName = $array[$sIndex][DB_NAME];
+            my $dbUser = $array[$sIndex][DB_USER];
+            my $dbHost = $array[$sIndex][DB_HOST];
+            my $dbPass = $array[$sIndex][DB_PASS];
+            my $wpSiteurl = $array[$sIndex][WP_SITEURL];
+            my $framework = $array[$sIndex][FRAMEWORK];
+
+            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG DB_SETTINGS: dbName: $dbName | dbUser: $dbUser | dbHost: $dbHost | dbPass: $dbPass\n wpSiteurl: $wpSiteurl | framework: $framework \n"); }
+            
             # read the config file of the framework
             my $readCommand = "";
             my $lineMatch;
@@ -660,11 +536,10 @@ sub pars_PublishSite
             my $settingsLine;
             if ($framework eq WORDPRESS)
             {
-                my $wpsubdir = $configFile;
+                my $wpsubdir = $array[$sIndex][CONFIGFILE];
                 my $documentRoot2 = quotemeta($documentRoot);
                 $wpsubdir =~ s/$documentRoot2//g;
-                $wpsubdir =~ s/wp-config.php//g;
-                `php read_wp_settings.php "$configFile" "$workingFolder/config-out.txt";`;
+                $wpsubdir =~ s/wp-config.php//g;                
                 $lineMatch = qr/define.*'DB_NAME'|define.*'DB_USER'|define.*'DB_PASSWORD'|define.*'DB_HOST'|define\s*\(\s*'WP_CONTENT_DIR'/;
                 $lineNotMatch = qr/define\s*\(\s*'WP_CONTENT_DIR',\s*ABSPATH\s*.\s*'wp-content'\s*\)/;
                 $settingsLine = "define('DB_NAME', '$rDatabase');\ndefine('DB_USER', '$rUsername');\ndefine('DB_PASSWORD', '$rPassword');"
@@ -672,14 +547,12 @@ sub pars_PublishSite
             }
             elsif ($framework eq DRUPAL)
             {
-                `php read_drupal_settings.php "$configFile" "$workingFolder/config-out.txt";`;
                 # TODO: improve drupal detection logic
                 $lineMatch = qr/databases.*'default'.*'default'/;
                 $settingsLine = "\$databases['default']['default']=array('driver'=>'mysql','database' =>'$rDatabase','username'=>'$rUsername','password'=>'$rPassword','host'=>'$rServer','port' => '','prefix' => '');\n";
             }
             elsif ($framework eq JOOMLA)
             {
-                `php read_joomla_settings.php "$configFile" "$workingFolder/config-out.txt";`;
                 $settingsLine = "public \$db = '$rDatabase';\npublic \$user = '$rUsername';\npublic \$password = '$rPassword';\npublic \$host = '$rServer';\n";
                 $lineMatch = qr/\$db\s*=|\$user\s*=|\$password\s*=|\$host\s*=/
             }
@@ -690,58 +563,13 @@ sub pars_PublishSite
                 return 0;
             }
 
-            open my $configFile, '<', "$workingFolder/config-out.txt" or die "Can't read config-out.txt: $!";
-            while (my $line = <$configFile>)
-            {
-                my @tempSplit = split('=', $line);
-                my $tempValue = @tempSplit[1];
-                chomp($tempValue);
-                if ($line =~ /DB_NAME/)
-                {
-                    $dbName = $tempValue;
-                }
-                if ($line =~ /DB_USER/)
-                {
-                    $dbUser = $tempValue;
-                }
-                if ($line =~ /DB_PASSWORD/)
-                {
-                    $dbPassword = $tempValue;
-                }
-                if ($line =~ /DB_HOST/)
-                {
-                    $dbHost = $tempValue;
-                }
-                if ($line =~ /WP_SITEURL/)
-                {
-                    $wpSiteurl = $tempValue;
-                }
-                if ($line =~ /INCLUDED_FILES/)
-                {
-                    @files = split /;/,$tempValue;
-                }
-            }
-            
-            # ilog_printf(1, "\n    $framework site detected, would you like to automatically change the config file for [$strSiteName]? (Y/N):");
-            # my $strYesOrNo = '';
-
-            # while($strYesOrNo !~ /^\s*[YynN]\s*$/)
-            # {
-            # chomp($strYesOrNo = <STDIN>);
-            # if ($strYesOrNo!~/^\s*[YynN]\s*$/)
-            # {
-            #     ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO);
-            # }
-            # elsif ($strYesOrNo=~/^\s*[Nn]\s*$/)
-            # {
-            #     last;
-            # }
             # START MUNGING
             rmtree(["$workingFolder/wwwroot"]);
             mkdir "$workingFolder/wwwroot";
             my @filesToCopy;
             # this relocates files to be in the correct layout in the working folder
             # the relocated files now end with _copy
+            @files = split /;/,$array[$sIndex][INCLUDED_FILES];
             &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, $workingFolder, \@files);
             @files = File::Find::Rule->file()
                 ->name("*_copy")
@@ -753,36 +581,6 @@ sub pars_PublishSite
                 my $outFile = $phpFile;
                 $outFile =~ s/_copy//g;
                 open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
-
-                # my $openBracket = FALSE;
-                # while (my $line = <$fh>)
-                # {
-                #     if ($line =~ /databases\['default'\]\['default'\]/)
-                #     {
-                #         if (!$settingsInserted)
-                #         {
-                #             print $out $settingsLine;                                        
-                #             $settingsInserted = TRUE;
-                #         }
-
-                #         $openBracket = TRUE;
-                #     }
-                
-                #     if ($openBracket)
-                #     {
-                #         print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
-                #     }
-                #     else
-                #     {
-                #         print $out $line;
-                #     }
-
-                #     if ($openBracket && $line =~ ';')
-                #     {
-                #         $openBracket = FALSE;
-                #     }
-                # }
-
                 my $openBracket = FALSE;
                 while (my $line = <$fh>)
                 {
@@ -841,8 +639,8 @@ sub pars_PublishSite
             while($returnCode != 0 && $retries < 5)
             {
                 ilog_print(1,"\nBacking up database on: $dbHost...\n");
-                if ($DEBUG_MODE) { ilog_print(1,"\nmysqldump --single-transaction -h $dbHost -u $dbUser -p'$dbPassword' $dbName > $workingFolder/mysqldump.sql\n"); }
-                `mysqldump --single-transaction -h $dbHost -u $dbUser -p'$dbPassword' $dbName > $workingFolder/mysqldump.sql`;
+                if ($DEBUG_MODE) { ilog_print(1,"\nmysqldump --single-transaction -h $dbHost -u $dbUser -p'$dbPass' $dbName > $workingFolder/mysqldump.sql\n"); }
+                `mysqldump --single-transaction -h $dbHost -u $dbUser -p'$dbPass' $dbName > $workingFolder/mysqldump.sql`;
 
                 $returnCode = $?;
                 $retries++;
@@ -4927,7 +4725,7 @@ sub pars_siteHasValidFrameworkDb
 
     if ($framework eq WORDPRESS)
     {
-        `php read_wp_settings.php "$configFile" "$workingFolder/${framework}-settings.txt";`;        
+        `php read_wp_settings.php "$configFile" "$workingFolder/${framework}-settings.txt";`;
     }
     elsif ($framework eq DRUPAL)
     {
@@ -4952,27 +4750,22 @@ sub pars_siteHasValidFrameworkDb
         chomp($tempValue);
         if ($line =~ /DB_NAME/)
         {
-            # $dbName = $tempValue;
-            $array[$i][CONFIGFILE] = $tempValue;
+            $array[$i][DB_NAME] = $tempValue;
         }
         if ($line =~ /DB_USER/)
         {
-            # $dbUser = $tempValue;
             $array[$i][DB_USER] = $tempValue;
         }
         if ($line =~ /DB_PASSWORD/)
         {
-            # $dbPassword = $tempValue;
-            $array[$i][DB_PASSWORD] = $tempValue;
+            $array[$i][DB_PASS] = $tempValue;
         }
         if ($line =~ /DB_HOST/)
         {
-            # $dbHost = $tempValue;
             $array[$i][DB_HOST] = $tempValue;
         }
         if ($line =~ /WP_SITEURL/)
         {
-            # $wpSiteurl = $tempValue;
             $array[$i][WP_SITEURL] = $tempValue;
         }
         if ($line =~ /INCLUDED_FILES/)
