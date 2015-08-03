@@ -229,10 +229,10 @@ sub pars_FirstPass
         }
         exit;
     }
-    else
-    {
-        ilog_printf(MSG_SITES_SELECTED,$nSitesSelected);
-    }
+    # else
+    # {
+    #     ilog_printf(MSG_SITES_SELECTED,$nSitesSelected);
+    # }
     
     #*********************************************************
     # If Listen is not present and Bind Address is given

@@ -406,16 +406,16 @@ sub pars_UploadPublishSettings
     ui_printline();
     ilog_printf(1,"[ $strSiteName ] - Site Publishing \n");
     ui_printline();
-    $strYesOrNo =" ";
-    while($strYesOrNo!~/^\s*[YynN]\s*$/)
-    {
-        ilog_printf(1, "    Do you want to publish the site [$strSiteName]? (Y/N):");
-        chomp($strYesOrNo = <STDIN>);
-        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-            if ($strYesOrNo!~/^\s*[YynN]\s*$/);
-    }
-
-    return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
+    # skip prompt for publishing
+    # $strYesOrNo =" ";
+    # while($strYesOrNo!~/^\s*[YynN]\s*$/)
+    # {
+    #     ilog_printf(1, "    Do you want to publish the site [$strSiteName]? (Y/N):");
+    #     chomp($strYesOrNo = <STDIN>);
+    #     ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+    #         if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+    # }
+    # return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
     &pars_PublishSite($strPublishSettings, $sIndex);
 }
 
@@ -869,7 +869,7 @@ sub deployToSite
     ilog_print(1,"\n");
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: content upload response code: $rCode\n"); }
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: content upload result: $rContent\n"); }
-    ilog_print(1,"\n$itemToAdd published with response code: $rCode\nTo site: $publishUrl");
+    ilog_print(1,"\n$itemToAdd published with response code: $rCode\nTo site: $publishUrl\n");
     close $fileZip;
     return $rCode;
 }
