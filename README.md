@@ -16,13 +16,19 @@ sudo apt-get install liblwp-protocol-https-perl
 perl LWP HTTPS can be installed with yum:
 
 ```
-yum install perl-LWP-Protocol-https
+sudo yum install perl-LWP-Protocol-https
 ```
 
 You may also need to install some additional libraries:
 ```
-yum install perl-Digest-MD5
-yum install perl-Compress-Raw-Zlib
+sudo yum install perl-Digest-MD5
+sudo yum install perl-Compress-Raw-Zlib
+```
+
+### OpenSUSE
+perl LWP HTTPS can be installed with zypper:
+```
+sudo zypper install perl-LWP-Protocol-https
 ```
 
 ## Running the tool

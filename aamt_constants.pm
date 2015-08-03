@@ -126,9 +126,11 @@ use constant CON_HTTPD_PATH					=>
     Please enter the ABSOLUTE PATH of your  Apache  Configuration File or
     press [Enter] to continue with the default path.
 NOTE: path is usually: 
-      /etc/apache2/apache2.conf 
+      [Debian/Ubuntu]:   /etc/apache2/apache2.conf 
   OR
-      /etc/httpd/conf/httpd.conf
+      [RedHat/CentOS]:   /etc/httpd/conf/httpd.conf
+  OR
+      [OpenSUSE]:        /etc/apache2/httpd.conf
 Enter Configuration file path [/etc/apache2/apache2.conf]: "; # /etc/httpd/conf/httpd.conf
 
 use constant CON_HTTPD_FILE_STATUS          =>                  "\n Getting the configuration file...";
@@ -448,6 +450,12 @@ use constant MYSQL                          => 60;
 use constant FRAMEWORK                      => 61;
 use constant CONFIGFILE                     => 62;
 use constant PUBLISH                        => 63;
+use constant DB_NAME                        => 64;
+use constant DB_USER                        => 65;
+use constant DB_PASSWORD                    => 66;
+use constant DB_HOST                        => 67;
+use constant INCLUDED_FILES                 => 68;
+use constant WP_SITEURL                     => 69;
 
 use constant WORDPRESS    => 'Wordpress';
 use constant DRUPAL       => 'Drupal';
