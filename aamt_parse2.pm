@@ -34,7 +34,7 @@ my $DEBUG_MODE = 0;
 #----------------------------------------------------------------------------------------------------------------------
 #                                          Global variables used by this module
 #----------------------------------------------------------------------------------------------------------------------
-my $SITE_URL = 'https://migrate4.azurewebsites.net';
+my $SITE_URL = 'https://www.movemetothecloud.net';
 my @siteIndex;                  # To store the string used for display
 my @array;                      # To store Site related directive settings.
 my @arrayDir;                   # To store Directory related directive settings.
@@ -401,7 +401,7 @@ sub pars_UploadPublishSettings
     my $sIndex = shift;
         
     my $strSiteName = $array[$sIndex][SITENAME];
-    my $strYesOrNo = "";    
+    my $strYesOrNo = "";
     ilog_print(1,"\n\n");
     ui_printline();
     ilog_printf(1,"[ $strSiteName ] - Site Publishing \n");
