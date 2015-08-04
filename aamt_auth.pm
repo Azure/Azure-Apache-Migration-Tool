@@ -141,12 +141,11 @@ sub auth_main
                 ilog_print (1,MSG_USAGE_COMPLETE);
                 $auqRetVal=0;
                 return ($auqRetVal,0); #return FALSE
-            } 
+            }
 
 			$tempretval=auth_resumeMigrate(CON_RECOVERY_MODE);
 			if($tempretval)
             {
-                $parseSuccess=auth_parseSessionFile();   #parse the session file
                 $auqRetVal=1;                
             }
             else
@@ -508,8 +507,8 @@ sub auth_displaySessionFile
     }
     else
     {	
-        ilog_print(1,CON_RECOVERY_FILE_CONTENTS);
-        ilog_print(1,"\n");	
+        # ilog_print(1,CON_RECOVERY_FILE_CONTENTS);
+        # ilog_print(1,"\n");
         while ($lineContent = <RECOVERYFILEHANDLE>) 
         {
             chomp($lineContent);
@@ -521,28 +520,29 @@ sub auth_displaySessionFile
                 $tempindex++;
             }
             
-            if ($lineContent=~ /$REC_SOURCE_IP/)
-            {				
-				$fileparse[$tempindex]=$lineContent;
-				$tempindex++;
-				$logFilereturn=ilog_print(1,"$lineContent\n");                
-            }
+            # if ($lineContent=~ /$REC_SOURCE_IP/)
+            # {				
+			# 	$fileparse[$tempindex]=$lineContent;
+			# 	$tempindex++;
+			# 	$logFilereturn=ilog_print(1,"$lineContent\n");                
+            # }
             
-            if ($lineContent=~ /$REC_TARGET_IP/)
-            {
-				$fileparse[$tempindex]=$lineContent;
-				$tempindex++;				
-				$logFilereturn=ilog_print(1,"$lineContent\n");
-            }            
+            # if ($lineContent=~ /$REC_TARGET_IP/)
+            # {
+			# 	$fileparse[$tempindex]=$lineContent;
+			# 	$tempindex++;				
+			# 	$logFilereturn=ilog_print(1,"$lineContent\n");
+            # }            
             
-            if ($lineContent=~ /$REC_MACHINE_TYPE/)
-            {
-				$fileparse[$tempindex]=$lineContent;
-				$tempindex++;
-            }            
+            # if ($lineContent=~ /$REC_MACHINE_TYPE/)
+            # {
+			# 	$fileparse[$tempindex]=$lineContent;
+			# 	$tempindex++;
+            # }
+            
             
             if($lineContent=~ /$REC_HTTPD_PATH/)
-            {				
+            {
 				$fileparse[$tempindex]=$lineContent;
 				$tempindex++;
 				@tempfileparse = split /\s+/,$lineContent;
@@ -561,7 +561,7 @@ sub auth_displaySessionFile
                 {
                     if (!($websitecount))
                     {
-                        $logFilereturn=ilog_print(1,CON_SITE_DETAILS);			  								  					
+                        $logFilereturn=ilog_print(1,CON_SITE_DETAILS);
                         &ui_printline();
                         $websitecount++;							
                     }
@@ -569,13 +569,13 @@ sub auth_displaySessionFile
                     $retval=auth_displaywebsitedetails($lineContent,$tempfilename);
                 }                
             }
-        }        
-    }    
+        }
+    }
 	
     close RECOVERYFILEHANDLE;
     return  @fileparse;
 }
-					
+
 #---------------------------------------------------------------------------------
 #Method Name	:	auth_inputSessionName
 #Description	: 	Returns the sessionname to the main program
@@ -675,7 +675,7 @@ sub auth_inputFilePath
         if(!($logFilereturn))
         {
             ilog_print(1,ERR_INTERNAL_ERROR_CONSOLE.__LINE__);
-        }        
+        }
     }
     
     return ($tempretval,$filePath);	
@@ -735,84 +735,6 @@ sub auth_resumeMigrate()
 	}
 
 	return $tempretval;
-}
-
-#---------------------------------------------------------------------------------
-#Method Name	:	auth_parseSessionFile
-#Description	: 	display the Recovery File contents to the user
-#Input		    :	recovery filename
-#			        
-#Output		    :
-#			        
-#			        
-#Return Value   :	boolean
-#---------------------------------------------------------------------------------				
-sub auth_parseSessionFile
-{
-    my $tempindex;
-    my $tempvar;
-    my @tempfileparse;
-    $tempindex = 0;    
-    $rm = $fileparse[$tempindex];
-    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Running in recovery mode : $rm\n"); }
-    if( ($fileparse[$tempindex] eq RECOVERY_MODE_0) || ($fileparse[$tempindex] eq RECOVERY_MODE_1) ||($fileparse[$tempindex] eq RECOVERY_MODE_2) )
-    {
-        $tempvar = $fileparse[$tempindex];        
-        if (!(defined($tempvar)))            
-        {
-            return FALSE;
-        }
-        
-        $tempindex++;   	
-        $tempvar =$fileparse[$tempindex];
-        @tempfileparse = split /\s+/, $tempvar;
-        $sourceMachineAddress= $tempfileparse[$#tempfileparse];
-        chomp($sourceMachineAddress);
-        $sourceMachineAddress=ltrim($sourceMachineAddress);   #Source Machine Address#        
-        if ($sourceMachineAddress eq "")            
-        {
-            return 1;
-        }
-        
-        $tempindex++;   	
-        $tempvar=$fileparse[$tempindex];
-        @tempfileparse = split /\s+/, $tempvar;
-        $targetMachineAddress =$tempfileparse[$#tempfileparse];
-        chomp($targetMachineAddress);
-        $targetMachineAddress=ltrim($targetMachineAddress);  #Target Machine Address#
-        if ($targetMachineAddress eq "")            
-        {
-            return 2;
-        }        
-        
-        $tempindex++;
-        $tempvar=$fileparse[$tempindex];
-        @tempfileparse = split /\s+/, $tempvar;
-        $currentMachineType =$tempfileparse[$#tempfileparse];
-        chomp($currentMachineType);
-        # TODO: remove the references to the target machine
-        $currentMachineType=ltrim($currentMachineType);  #Target Machine Address#        
-        $tempindex++;        
-        $tempvar =$fileparse[$tempindex];
-        @tempfileparse = split /\s+/,$tempvar;
-        $filePath = $tempfileparse[$#tempfileparse];
-        chomp($filePath);
-        $filePath = ltrim($filePath ); # file path
-        if ($filePath eq "")
-        {            
-            return 3;
-        }
-        else
-        {
-            return 4; # Appended at the recovery failure stage
-        }	    
-    }
-    else
-    {        
-        $logFilereturn=ilog_print(1,ERR_FILE_OPEN.__LINE__);
-    }
-	
-    return 4;    
 }
 
 #---------------------------------------------------------------------------------

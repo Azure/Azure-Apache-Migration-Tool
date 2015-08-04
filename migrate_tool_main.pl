@@ -1,4 +1,3 @@
-
 use strict;
 # package used to get the current working folder
 use aamt_wrkFolder;
@@ -35,25 +34,34 @@ my $boolVersionNumber;
 my $blnWISrcRet;
 my $logFileReturn;
 my $RecoveryMode = "";
-my $DEBUG_MODE = FALSE;
+my $DEBUG_MODE = 1;
+
 eval
-{
+{    
     my $auqRetVal;
     ($auqRetVal,$localConfFilePath) = auth_main();        # AUQ module functionality    
     if(!($auqRetVal))
     {
         &DeleteWorkingFolder();
 	    die CLEANUP_AND_EXIT;
-    }    
+    }
+    
+    if (auth_isRecovery() eq "RECOVERY") 
+    {
+        $RecoveryMode = pars_GetRecoveryCode();    
+    }
+
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: RECOVERY MODE: [$RecoveryMode]\n"); }
 
     if ( ($RecoveryMode ne RECOVERY_MODE_1) && ($RecoveryMode ne RECOVERY_MODE_2) && ($RecoveryMode ne RECOVERY_MODE_3))
     {        
 	    &pars_FirstPass($localConfFilePath);    # Parser Module first pass
-        &pars_SetRecoveryCode(RECOVERY_MODE_1);    
+        &pars_SetRecoveryCode(RECOVERY_MODE_1);
     }
     
     if (($RecoveryMode ne RECOVERY_MODE_2) && ($RecoveryMode ne RECOVERY_MODE_3))
     {
+        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: CONCATENATING CONFIG FILES\n"); }
         # Concatenate all of the configuration files in preparation for the next step where we parse the master file
         use Cwd;
         my $pwd = cwd();
@@ -103,12 +111,17 @@ eval
             print HANDLE_CONF_ALL $concatenated;
             close(HANDLE_CONF_ALL); 
         }
-        
-        &pars_Generate2D(&utf_getCompleteFilePath(FILE_CONF_ALL),&utf_getCompleteFilePath(FILE_RECOVERY));
-        # Parser Module second pass
+     
+        my $logFilereturn = ilog_setLogInformation('REC_INFO',"FILE_CONF_ALL ".REC_ADD_EQUAL,&utf_getCompleteFilePath(FILE_CONF_ALL),'');
         &pars_SetRecoveryCode(RECOVERY_MODE_2);
     }
-        
+
+    if (($RecoveryMode ne RECOVERY_MODE_3))
+    {
+        &pars_Generate2D(&utf_getCompleteFilePath(FILE_CONF_ALL), &utf_getCompleteFilePath(FILE_RECOVERY));
+        &pars_UploadPublishSettingsAllSites();
+    }
+
     &pars_SetRecoveryCode(RECOVERY_MODE_3);
 	utf_setCurrentModuleName(''); 
 	&utf_gettimeinfo('1');

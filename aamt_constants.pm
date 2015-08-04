@@ -231,12 +231,10 @@ use constant DEFAULT_SITE_FILE        =>  "_Default.txt";
 #*****************************************************************************#
 # Following set of constants used to define recovery file inputs              #
 #*****************************************************************************#
-use constant REC_CURRENT_IP                 =>                  "Current IP =";
-use constant REC_SOURCE_IP                  =>                  "Source IP ";
-use constant REC_TARGET_IP                  =>                  "Target IP ";
-use constant REC_MACHINE_TYPE               =>                  "Execution Mode ";     
 use constant REC_HTTPD_PATH                 =>                  "File Path ";   
 use constant REC_ADD_EQUAL                  =>                  "=";   
+use constant REC_MIG_SITE                   =>                  "Migrate site ";
+use constant REC_MIG_DB                     =>                  "Migrate database ";
 
 #*****************************************************************************#
 # Following set of constants used to define Web server details                 # 

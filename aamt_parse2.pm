@@ -80,6 +80,13 @@ my @errorDocument;
 my $errorDocumentCount = 0;
 my $virtUserdir = 0;
 
+# get the current working folder
+my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+#get session name
+my $strSessionName = &ilog_getSessionName();
+#form the complete working folder
+my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+
 #----------------------------------------------------------------------------------------------------------------------
 $siteIndex[0]  = 'SITENAME';
 $siteIndex[1]  = 'DIRECTORY';
@@ -197,6 +204,11 @@ sub pars_CreateReadinessReport
                 # if we are not publishing the site, go to the next one
                 next;
             }
+            else
+            {
+                # log to recovery file that this site is selected for publishing
+                my $logFilereturn = ilog_setLogInformation('REC_INFO',REC_MIG_SITE.REC_ADD_EQUAL,$array[$i][SITENAME],'');
+            }
         }
 
         my %rSite = ();
@@ -217,7 +229,9 @@ sub pars_CreateReadinessReport
         # populates $array global variable
         &pars_siteHasValidFrameworkDb($i);
         if ($array[$i][MYSQL])
-        {            
+        {
+            my $logFilereturn = ilog_setLogInformation('REC_INFO',REC_MIG_DB.REC_ADD_EQUAL,$array[$i][SITENAME],'');
+
             my $dbName = $array[$i][DB_NAME];
             my $dbUser = $array[$i][DB_USER];
             my $dbHost = $array[$i][DB_HOST];
@@ -313,6 +327,12 @@ sub pars_CreateReadinessReport
     }
 
     ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
+    
+    # write the readiness report to a file
+    my $outFile = "$workingFolder/readinessreport.json";
+    open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
+    print $out $json_text;
+    close $out;
 }
 
 sub pars_UploadPublishSettingsAllSites
@@ -428,13 +448,7 @@ sub pars_PublishSite
     my $rComputername = `hostname`;
     $rComputername =~ s/\n//g;
     my $publishSuccess = FALSE;
-    my $strYesOrNo =" ";
-    # get the current working folder
-    my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-    #get session name
-    my $strSessionName = &ilog_getSessionName();
-    #form the complete working folder
-    my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+    my $strYesOrNo =" ";    
     my $publishUrl;
     my $destinationAppUrl;
     my $userName;
@@ -570,7 +584,7 @@ sub pars_PublishSite
             # this relocates files to be in the correct layout in the working folder
             # the relocated files now end with _copy
             @files = split /;/,$array[$sIndex][INCLUDED_FILES];
-            &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, $workingFolder, \@files);
+            &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, \@files);
             @files = File::Find::Rule->file()
                 ->name("*_copy")
                 ->in("$workingFolder/wwwroot");
@@ -689,7 +703,7 @@ sub getConfigFiles
     my $documentRoot = $_[0];
     my $lineMatch = $_[1];
     my $lineNotMatch = $_[2];
-    my $workingFolder = $_[3];
+    # my $workingFolder = $_[3];
     my @files = @{$_[4]};    
     for my $phpFile (@files)
     {
@@ -819,9 +833,9 @@ sub deployToSite
         $zip->addFile($itemToAdd, $filename);
     }
 
-    my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-    my $strSessionName = &ilog_getSessionName();
-    my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+    # my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+    # my $strSessionName = &ilog_getSessionName();
+    # my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
     my $zipLocation = "$workingFolder/site-content.zip";
     if ( $zip->writeToFileNamed($zipLocation) != AZ_OK ) 
     {
@@ -1192,7 +1206,6 @@ sub pars_Generate2D
     # this has the side effect of calling pars_siteHasValidFrameworkDb
     # which populates the global variable $array MYSQL, FRAMEWORK, and CONFIGFILE entries
     &pars_CreateReadinessReport();
-    &pars_UploadPublishSettingsAllSites();
     return 1;
 }
 
@@ -4717,11 +4730,11 @@ sub pars_siteHasValidFrameworkDb
     my $dbUser;
     my $dbPassword;
     my $dbHost;
-    my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-    #get session name
-    my $strSessionName = &ilog_getSessionName();
-    #form the complete working folder
-    my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+    # my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+    # #get session name
+    # my $strSessionName = &ilog_getSessionName();
+    # #form the complete working folder
+    # my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
 
     if ($framework eq WORDPRESS)
     {
