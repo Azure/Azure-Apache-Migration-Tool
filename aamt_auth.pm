@@ -507,10 +507,17 @@ sub auth_displaySessionFile
     }
     else
     {	
-        # ilog_print(1,CON_RECOVERY_FILE_CONTENTS);
-        # ilog_print(1,"\n");
+        ilog_print(1,CON_RECOVERY_FILE_CONTENTS);
+        ilog_print(1,"\n");
+        my $siteSection = 0;
         while ($lineContent = <RECOVERYFILEHANDLE>) 
         {
+            if ($siteSection)
+            {
+                ilog_print(1, $lineContent);
+                next;
+            }
+
             chomp($lineContent);
             $lineContent =~ s/^\s+//;
             $lineContent =~ s/\s+$//;
@@ -519,28 +526,7 @@ sub auth_displaySessionFile
                 $fileparse[$tempindex]=$lineContent;
                 $tempindex++;
             }
-            
-            # if ($lineContent=~ /$REC_SOURCE_IP/)
-            # {				
-			# 	$fileparse[$tempindex]=$lineContent;
-			# 	$tempindex++;
-			# 	$logFilereturn=ilog_print(1,"$lineContent\n");                
-            # }
-            
-            # if ($lineContent=~ /$REC_TARGET_IP/)
-            # {
-			# 	$fileparse[$tempindex]=$lineContent;
-			# 	$tempindex++;				
-			# 	$logFilereturn=ilog_print(1,"$lineContent\n");
-            # }            
-            
-            # if ($lineContent=~ /$REC_MACHINE_TYPE/)
-            # {
-			# 	$fileparse[$tempindex]=$lineContent;
-			# 	$tempindex++;
-            # }
-            
-            
+
             if($lineContent=~ /$REC_HTTPD_PATH/)
             {
 				$fileparse[$tempindex]=$lineContent;
@@ -559,15 +545,10 @@ sub auth_displaySessionFile
                 }
                 else
                 {
-                    if (!($websitecount))
-                    {
-                        $logFilereturn=ilog_print(1,CON_SITE_DETAILS);
-                        &ui_printline();
-                        $websitecount++;							
-                    }
-
-                    $retval=auth_displaywebsitedetails($lineContent,$tempfilename);
-                }                
+                    $logFilereturn=ilog_print(1,CON_SITE_DETAILS);
+                    ilog_print(1, "$lineContent\n");
+                    $siteSection = 1;
+                }
             }
         }
     }
@@ -756,7 +737,7 @@ sub auth_displaywebsitedetails
 	my $tempvar;
 	my $ipportVar;    
 	&ui_printline();	
-	ilog_print(1,"$websiteName\n\n");#for printing werbsite name only
+	ilog_print(1,"$websiteName\n\n");
 	for ($i=0; $i<5;$i++)
 	{
 		$lineContent = <RECOVERYFILEHANDLE>;

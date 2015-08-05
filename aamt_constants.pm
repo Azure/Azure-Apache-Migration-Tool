@@ -233,8 +233,6 @@ use constant DEFAULT_SITE_FILE        =>  "_Default.txt";
 #*****************************************************************************#
 use constant REC_HTTPD_PATH                 =>                  "File Path ";   
 use constant REC_ADD_EQUAL                  =>                  "=";   
-use constant REC_MIG_SITE                   =>                  "Migrate site ";
-use constant REC_MIG_DB                     =>                  "Migrate database ";
 
 #*****************************************************************************#
 # Following set of constants used to define Web server details                 # 

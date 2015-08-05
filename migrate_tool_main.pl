@@ -34,7 +34,7 @@ my $boolVersionNumber;
 my $blnWISrcRet;
 my $logFileReturn;
 my $RecoveryMode = "";
-my $DEBUG_MODE = 1;
+my $DEBUG_MODE = 0;
 
 eval
 {    
@@ -48,11 +48,10 @@ eval
     
     if (auth_isRecovery() eq "RECOVERY") 
     {
-        $RecoveryMode = pars_GetRecoveryCode();    
+        $RecoveryMode = pars_GetRecoveryCode();
     }
 
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: RECOVERY MODE: [$RecoveryMode]\n"); }
-
     if ( ($RecoveryMode ne RECOVERY_MODE_1) && ($RecoveryMode ne RECOVERY_MODE_2) && ($RecoveryMode ne RECOVERY_MODE_3))
     {        
 	    &pars_FirstPass($localConfFilePath);    # Parser Module first pass
@@ -118,7 +117,8 @@ eval
 
     if (($RecoveryMode ne RECOVERY_MODE_3))
     {
-        &pars_Generate2D(&utf_getCompleteFilePath(FILE_CONF_ALL), &utf_getCompleteFilePath(FILE_RECOVERY));
+        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: RECOVERY MODE: [$RecoveryMode]\n"); }
+        &pars_Generate2D(&utf_getCompleteFilePath(FILE_CONF_ALL), &utf_getCompleteFilePath(FILE_RECOVERY), $RecoveryMode);
         &pars_UploadPublishSettingsAllSites();
     }
 

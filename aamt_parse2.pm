@@ -1,17 +1,3 @@
-#######################################################################################################################
-#
-# Method Name   : pars_Generate2D
-#
-# Description   : The method is used to populate a 2 dimensional array 
-#                 the name and value of the directives that are migrated by the tool. 
-#
-# Input         : Httpd.conf
-#
-# OutPut        : Creation of a 2 dimensional array enumerating the site configuration information read from apache config
-#
-# Status        : Success/failure depending on the status of the function call.
-#
-#######################################################################################################################
 use strict;
 use xml::doc;
 use aamt_utilityFunctions;
@@ -21,7 +7,6 @@ use LWP::UserAgent;
 use HTTP::Request;
 use XML::Simple;
 use XML::SAX;
-# use XML::LibXML;
 use MIME::Base64;
 use Archive::Zip qw( :ERROR_CODES :CONSTANTS );
 use File::Find::Rule;
@@ -43,6 +28,7 @@ my $directiveName;              # To store the Directive Name encountered when r
 my $directiveValue;             # To store the Directive Value encountered when read from httpd.conf.
 my $configFile;                 # To store the name of the file which has the Apache configuration settings.
 my $ResourceFile;               # To store the name of the file which has the site details selected for migration
+my $RecoveryMode;
 my $lineContent;                # To store the individual line content read from httpd.conf
 my @Tmp;                    
 my $temp;
@@ -147,6 +133,17 @@ $siteIndex[55] = 'USERENABLED';
 $siteIndex[56] = 'USERDISABLED';
 $siteIndex[57] = 'TASKLIST';
 $siteIndex[58] = 'XML'; 
+$siteIndex[59] = 'HTACCESS';
+$siteIndex[60] = 'MYSQL';
+$siteIndex[61] = 'FRAMEWORK';
+$siteIndex[62] = 'CONFIGFILE';
+$siteIndex[63] = 'PUBLISH';
+$siteIndex[64] = 'NAME';
+$siteIndex[65] = 'USER';
+$siteIndex[66] = 'PASS';
+$siteIndex[67] = 'HOST';
+$siteIndex[68] = 'FILES';
+$siteIndex[69] = 'SITEURL';
 
 ######################################################################################
 #Sub        : pars_GetDirlistinght
@@ -181,7 +178,7 @@ sub pars_CreateReadinessReport
     $osVersion =~ s/\n//g;
     $osVersion = 'LX: ' . $osVersion;
     $osVersion = substr($osVersion, 0, 50);
-    $array[0][PUBLISH] = &pars_AskSelectSites($array[0][SITENAME], $array[0][DOCUMENTROOT]);
+    $array[0][PUBLISH] = &pars_AskSelectSites(0);
     if ($array[0][PUBLISH])
     {
         $start = 0;
@@ -198,17 +195,12 @@ sub pars_CreateReadinessReport
         my $mySiteName = $array[$i][SITENAME];
         if ($i != 0)
         {
-            $array[$i][PUBLISH] = &pars_AskSelectSites($array[$i][SITENAME], $array[$i][DOCUMENTROOT]);
+            $array[$i][PUBLISH] = &pars_AskSelectSites($i);
             if ( !$array[$i][PUBLISH] )
             {
                 # if we are not publishing the site, go to the next one
                 next;
-            }
-            else
-            {
-                # log to recovery file that this site is selected for publishing
-                my $logFilereturn = ilog_setLogInformation('REC_INFO',REC_MIG_SITE.REC_ADD_EQUAL,$array[$i][SITENAME],'');
-            }
+            }            
         }
 
         my %rSite = ();
@@ -228,10 +220,12 @@ sub pars_CreateReadinessReport
 
         # populates $array global variable
         &pars_siteHasValidFrameworkDb($i);
-        if ($array[$i][MYSQL])
-        {
-            my $logFilereturn = ilog_setLogInformation('REC_INFO',REC_MIG_DB.REC_ADD_EQUAL,$array[$i][SITENAME],'');
+        # log to recovery file that this site is selected for publishing
+        # and log the MySQL status
+        &pars_logSiteToRecoveryFile($i);
 
+        if ($array[$i][MYSQL])
+        {            
             my $dbName = $array[$i][DB_NAME];
             my $dbUser = $array[$i][DB_USER];
             my $dbHost = $array[$i][DB_HOST];
@@ -289,50 +283,54 @@ sub pars_CreateReadinessReport
 
     $rServers{$rComputername} = \%rServer;
     $rServers2{"Servers"} = \%rServers;
-    # Log the 2 dimensional array content to Status and Log files.    
     $json_text = encode_json ( \%rServers2 );
-    my $baseAddress = $SITE_URL .'/api/compat2/'.$guid;
-    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Uploading the JSON Readiness report to $baseAddress:\n $json_text\n"); }
-    my $ua = LWP::UserAgent->new;
-    my $req = HTTP::Request->new("PUT", $baseAddress);
-    $req->header( 'Content-Type' => 'application/json' );
-    $req->content( $json_text );
 
-    my $publishSuccess = FALSE;
-    while (!$publishSuccess)
+    if ($RecoveryMode ne RECOVERY_MODE_2)
     {
-        my $res = $ua->request($req);
-        my $rContent = $res->content;
-        my $rCode = $res->code;
-        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
-        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
+        # We don't need to re-upload the readiness report if someone already did it
+        my $baseAddress = $SITE_URL .'/api/compat2/'.$guid;
+        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Uploading the JSON Readiness report to $baseAddress:\n $json_text\n"); }
+        my $ua = LWP::UserAgent->new;
+        my $req = HTTP::Request->new("PUT", $baseAddress);
+        $req->header( 'Content-Type' => 'application/json' );
+        $req->content( $json_text );
 
-        if ($rCode !~ /^\s*2[0-9]*/)
+        my $publishSuccess = FALSE;
+        while (!$publishSuccess)
         {
-            ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
-            my $strYesOrNo ="";
-            while($strYesOrNo!~/^\s*[YynN]\s*$/)
+            my $res = $ua->request($req);
+            my $rContent = $res->content;
+            my $rCode = $res->code;
+            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
+            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
+
+            if ($rCode !~ /^\s*2[0-9]*/)
             {
-                ilog_printf(1, "    Would you like to retry uploading the readiness report? (Y/N):");
-                chomp($strYesOrNo = <STDIN>);
-                ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-                    if ($strYesOrNo!~/^\s*[YynN]\s*$/);
-                $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
+                ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
+                my $strYesOrNo ="";
+                while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                {
+                    ilog_printf(1, "    Would you like to retry uploading the readiness report? (Y/N):");
+                    chomp($strYesOrNo = <STDIN>);
+                    ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                        if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+                    $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
+                }
             }
+            else
+            {
+                $publishSuccess = TRUE;
+            }            
         }
-        else
-        {
-            $publishSuccess = TRUE;
-        }            
-    }
 
-    ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
-    
-    # write the readiness report to a file
-    my $outFile = "$workingFolder/readinessreport.json";
-    open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
-    print $out $json_text;
-    close $out;
+        ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
+        
+        # write the readiness report to a file
+        my $outFile = "$workingFolder/readinessreport.json";
+        open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
+        print $out $json_text;
+        close $out;
+    }
 }
 
 sub pars_UploadPublishSettingsAllSites
@@ -584,6 +582,9 @@ sub pars_PublishSite
             # this relocates files to be in the correct layout in the working folder
             # the relocated files now end with _copy
             @files = split /;/,$array[$sIndex][INCLUDED_FILES];
+
+            if ($DEBUG_MODE) { ilog_print(1,"\n>>>>getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, files);\nfiles: ".$array[$sIndex][INCLUDED_FILES]); }
+
             &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, \@files);
             @files = File::Find::Rule->file()
                 ->name("*_copy")
@@ -700,11 +701,13 @@ sub pars_PublishSite
 
 sub getConfigFiles
 {
+    
     my $documentRoot = $_[0];
     my $lineMatch = $_[1];
     my $lineNotMatch = $_[2];
     # my $workingFolder = $_[3];
-    my @files = @{$_[4]};    
+    my @files = @{$_[3]};
+
     for my $phpFile (@files)
     {
         open my $fh, '<', $phpFile or die "Failed to open $_: $!";
@@ -921,12 +924,25 @@ sub pars_GetFileFromSource
     }
 }
 
-## original
+#######################################################################################################################
+#
+# Method Name   : pars_Generate2D
+#
+# Description   : The method is used to populate a 2 dimensional array 
+#                 the name and value of the directives that are migrated by the tool. 
+#
+# Input         : Httpd.conf
+#
+# OutPut        : Creation of a 2 dimensional array enumerating the site configuration information read from apache config
+#
+# Status        : Success/failure depending on the status of the function call.
+#
+#######################################################################################################################
 sub pars_Generate2D
 {   
     utf_setCurrentModuleName('PARSER');
     ilog_print(1,"\n\nParsing Apache conf file(s)... ");
-    ($configFile,$ResourceFile) = @_;
+    ($configFile,$ResourceFile, $RecoveryMode) = @_;
 
     eval
     {
@@ -1080,25 +1096,9 @@ sub pars_Generate2D
             }
 
             $siteName = $serverName;
-            # ADRIANG: CHANGE SITE SELECTED FLOW:
-            # if(&pars_siteSelected($serverName))
-            # {
-                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: processing selected site: $serverName\n"); }
-                &pars_setVirtualhost();             
-            # }
-            # else
-            # {
-            #     while ($lineContent = <CONFIGHANDLE>)
-            #     {
-            #         chomp($lineContent);
-            #         $lineContent =~ s/^\s+//;
-            #         $lineContent =~ s/\s+$//;
-            #         if($lineContent =~ /^<\/VirtualHost>/)
-            #         {
-            #             last;
-            #         }
-            #     }
-            # }
+            
+            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: processing selected site: $serverName\n"); }
+            &pars_setVirtualhost();
         }
         else
         {           
@@ -4499,7 +4499,7 @@ sub pars_printArraysite
     print "\n--------------------------------------------------------------------------\n";
     for($i = 0;$i <= $rowCount; $i++)
     {
-        for($j = 0;$j < 59; $j++)
+        for($j = 0;$j < 70; $j++)
         {
             print $siteIndex[$j] , "  =  ", $array[$i][$j], "\n"; 
         }
@@ -4658,11 +4658,11 @@ sub pars_IPSelected
 # populates the $array global variable...
 sub pars_siteHasValidFrameworkDb
 {
-    my $i = shift;
-    my $documentRoot = $array[$i][DOCUMENTROOT];
-    my $strSiteName = $array[$i][SITENAME];
+    my $sIndex = shift;
+    my $documentRoot = $array[$sIndex][DOCUMENTROOT];
+    my $strSiteName = $array[$sIndex][SITENAME];
     my $framework = "";
-    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: pars_siteHasValidFrameworkDb [i:$i][strSiteName:$strSiteName][documentRoot:$documentRoot]\n"); }
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: pars_siteHasValidFrameworkDb [i:$sIndex][strSiteName:$strSiteName][documentRoot:$documentRoot]\n"); }
     if (!(-d $documentRoot))
     {
         # TODO: why is this empty??
@@ -4676,7 +4676,7 @@ sub pars_siteHasValidFrameworkDb
     if (@files > 0)
     {
         $framework = WORDPRESS;
-        $array[$i][FRAMEWORK] = $framework;
+        $array[$sIndex][FRAMEWORK] = $framework;
     }
     else
     {
@@ -4687,7 +4687,7 @@ sub pars_siteHasValidFrameworkDb
         if (@files > 0)
         {
             $framework = DRUPAL;
-            $array[$i][FRAMEWORK] = $framework;
+            $array[$sIndex][FRAMEWORK] = $framework;
         }
         else
         {
@@ -4698,7 +4698,7 @@ sub pars_siteHasValidFrameworkDb
             if (@files > 0)
             {
                 $framework = JOOMLA;
-                $array[$i][FRAMEWORK] = $framework;        
+                $array[$sIndex][FRAMEWORK] = $framework;        
             }
         }
     }
@@ -4708,20 +4708,30 @@ sub pars_siteHasValidFrameworkDb
         return;
     }
 
-    my $strYesOrNo =" ";
-    while($strYesOrNo!~/^\s*[YynN]\s*$/)
+    # if this is populated it's because we're running in recovery mode
+    # and we don't need to ask about it again
+    if (!$array[$sIndex][MYSQL])
     {
-        ilog_printf(1, "\n    $framework site detected, would you like to automatically create and migrate the database [$strSiteName]? (Y/N):");
-        chomp($strYesOrNo = <STDIN>);
-        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-            if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+        my $strYesOrNo =" ";
+        while($strYesOrNo!~/^\s*[YynN]\s*$/)
+        {
+            ilog_printf(1, "\n    $framework site detected, would you like to automatically create and migrate the database [$strSiteName]? (Y/N):");
+            chomp($strYesOrNo = <STDIN>);
+            ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+        }
+        
+        $array[$sIndex][MYSQL] = ($strYesOrNo=~/^\s*[Yy]\s*$/);
+    }
+    else
+    {
+        ilog_printf(1, "\n    $framework site detected, automatically creating and migrate the database [$strSiteName] based on recovery file settings");
     }
     
-    $array[$i][MYSQL] = ($strYesOrNo=~/^\s*[Yy]\s*$/);
     # TODO: more accurate way to make sure that this is the root config
     my $configFile = $files[0];
-    $array[$i][CONFIGFILE] = $configFile;
-    if (!$array[$i][MYSQL])
+    $array[$sIndex][CONFIGFILE] = $configFile;
+    if (!$array[$sIndex][MYSQL])
     {
         return;
     }    
@@ -4729,13 +4739,7 @@ sub pars_siteHasValidFrameworkDb
     my $dbName;
     my $dbUser;
     my $dbPassword;
-    my $dbHost;
-    # my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-    # #get session name
-    # my $strSessionName = &ilog_getSessionName();
-    # #form the complete working folder
-    # my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
-
+    my $dbHost;    
     if ($framework eq WORDPRESS)
     {
         `php read_wp_settings.php "$configFile" "$workingFolder/${framework}-settings.txt";`;
@@ -4763,30 +4767,30 @@ sub pars_siteHasValidFrameworkDb
         chomp($tempValue);
         if ($line =~ /DB_NAME/)
         {
-            $array[$i][DB_NAME] = $tempValue;
+            $array[$sIndex][DB_NAME] = $tempValue;
         }
         if ($line =~ /DB_USER/)
         {
-            $array[$i][DB_USER] = $tempValue;
+            $array[$sIndex][DB_USER] = $tempValue;
         }
         if ($line =~ /DB_PASSWORD/)
         {
-            $array[$i][DB_PASS] = $tempValue;
+            $array[$sIndex][DB_PASS] = $tempValue;
         }
         if ($line =~ /DB_HOST/)
         {
-            $array[$i][DB_HOST] = $tempValue;
+            $array[$sIndex][DB_HOST] = $tempValue;
         }
         if ($line =~ /WP_SITEURL/)
         {
-            $array[$i][WP_SITEURL] = $tempValue;
+            $array[$sIndex][WP_SITEURL] = $tempValue;
         }
         if ($line =~ /INCLUDED_FILES/)
         {
             # @files = split /;/,$tempValue;
-            $array[$i][INCLUDED_FILES] = $tempValue;
+            $array[$sIndex][INCLUDED_FILES] = $tempValue;
         }
-    }
+    }    
 }
 
 #######################################################################################################################
@@ -4846,6 +4850,34 @@ sub pars_siteHasDb
 }
 
 #-------------------------------------------------------------------------
+# Method Name       :        pars_logSiteToRecoveryFile
+# Description       :        The method logs the site info to the recovery
+#                            file.
+# Input             :        site index
+# Return Value      :        boolean
+#-------------------------------------------------------------------------
+sub pars_logSiteToRecoveryFile
+{
+    if ($RecoveryMode eq RECOVERY_MODE_2)
+    {
+        # we have already logged to this file on a previous iteration
+        return;
+    }
+        
+    my $sIndex = shift;
+    my $strRecoveryInfo;		# Info to be written on recovery file.
+    my $strSiteName = $array[$sIndex][SITENAME];
+    my $strSiteRoot = $array[$sIndex][DOCUMENTROOT];
+
+    $strRecoveryInfo  .=  "\n[$strSiteName]";
+    $strRecoveryInfo  .=  "\nDocumentRoot=$strSiteRoot";
+    # mySQL 
+    $strRecoveryInfo  .=  "\nMySQL=".( ($array[$sIndex][MYSQL]) ? "yes" : "no" );
+    $strRecoveryInfo  .=  "\nFramework=".$array[$sIndex][FRAMEWORK];
+    ilog_setLogInformation("REC_INFO","",$strRecoveryInfo,"","",$strSessionName);
+}
+
+#-------------------------------------------------------------------------
 # Method Name       :        pars_AskSelectSites
 # Description       :        The method asks the user if they want to migrate
 #                            the site.
@@ -4854,9 +4886,28 @@ sub pars_siteHasDb
 #-------------------------------------------------------------------------
 sub pars_AskSelectSites
 {
+    my $sIndex = shift;
+    my $strSiteName = $array[$sIndex][SITENAME];
+    my $documentRoot = $array[$sIndex][DOCUMENTROOT];
     my $strYesOrNo = "";
-    my $strSiteName = shift;
-    my $documentRoot = shift;
+    # first check the recovery file to see if the site is already there
+    if ($RecoveryMode ne "")
+    {
+        if (&pars_siteSelected($strSiteName))
+        {
+            my $sitehasdb = &pars_siteHasDb($strSiteName);
+            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: SITEHASDB: [$strSiteName] [$sitehasdb]"); }
+            $array[$sIndex][MYSQL] = $sitehasdb;
+            return 1;
+
+        }
+        else 
+        {
+            return 0;
+        }
+    }
+
+    $array[$sIndex][MYSQL] = 0;
     my $promptyn;    
     ilog_print(1,"\n\n");
     ui_printline();
@@ -4925,28 +4976,7 @@ sub pars_siteSelected
             $lineContent =~ s/^\s+//;
             $lineContent =~ s/\s+$//;
             if($lineContent eq $siteName)
-            {
-                while ($lineContent = <RECOVERYHANDLE>) 
-                {                   
-                    if($lineContent =~ /^DestinationPath/)
-                    {
-                        @tmpArray = split /=/,$lineContent;
-                        $destinationPath = $tmpArray[1];
-                        if($destinationPath =~ /[A-Za-z]:$/)
-                        {
-                            chomp($destinationPath); 
-                            $destinationPath = $destinationPath . "\\\\";                           
-                        }
-                        elsif($destinationPath =~ /[A-Za-z]:\\$/)
-                        {
-                            chomp($destinationPath); 
-                            $destinationPath = $destinationPath . "\\";                         
-                        }
-
-                        chomp($destinationPath);
-                        last;
-                    }
-                }
+            {                
                 eval
                 {
                     close RECOVERYHANDLE or die 'ERR_FILE_CLOSE';                    
