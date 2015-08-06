@@ -6,7 +6,7 @@ The Azure Apache Migration Migration Tool is a tool that allows customers to mov
 Make sure that all prerequisites are installed, and then run:
 
 ```
-wget http://migrate3.azurewebsites.net/Azure-Apache-Migration-Tool.tar.gz
+wget http://www.movemetothecloud.net/Azure-Apache-Migration-Tool.tar.gz
 tar -xvzf Azure-Apache-Migration-Tool.tar.gz
 cd Azure-Apache-Migration-Tool
 ```
