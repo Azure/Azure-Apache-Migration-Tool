@@ -349,7 +349,7 @@ sub pars_generateTransformRule
                         return 1;
                 }
             }
-return 0;
+        return 0;
 }
 
 sub pars_readTransformRule()
@@ -369,36 +369,37 @@ sub pars_readTransformRule()
 	{
 		$settingsLine=$settingsLine.$line;	
 	}	
-	if($lineNotMatch)
-	{return (qr/$lineMatch/,qr/$lineNotMatch/,$settingsLine);}   
-	else
-	{return (qr/$lineMatch/,$lineNotMatch,$settingsLine);}
+	if($lineNotMatch){
+	    return (qr/$lineMatch/,qr/$lineNotMatch/,$settingsLine);
+        }   
+	else{
+	    return (qr/$lineMatch/,$lineNotMatch,$settingsLine);
+        }
 }
 
 sub pars_DisplaySites
 {
-my $i;
-my $sIndex = shift;
-my $strSiteName = $array[$sIndex][SITENAME];
-my $documentRoot = $array[$sIndex][DOCUMENTROOT];
-my $framework;
-my @files;
-for ($i=0;$i <= $rowCount; $i++)
-{
-    $strSiteName = $array[$i][SITENAME];
-    $documentRoot = $array[$i][DOCUMENTROOT];
-    ($framework,@files) = &pars_DetectFramework($documentRoot);
-    {
+	my $i;
+	my $sIndex = shift;
+	my $strSiteName = $array[$sIndex][SITENAME];
+	my $documentRoot = $array[$sIndex][DOCUMENTROOT];
+	my $framework;
+	my @files;
+	for ($i=0;$i <= $rowCount; $i++)
+	{
+    	    $strSiteName = $array[$i][SITENAME];
+    	    $documentRoot = $array[$i][DOCUMENTROOT];
+    	    ($framework,@files) = &pars_DetectFramework($documentRoot);
+    	    {
 
-	ilog_printf(1,"[$framework]:[$strSiteName]:[$documentRoot]");
-	ilog_printf(1,"\n");
-    }
-#    ui_printline();
-#    ilog_printf(MSG_SITE_DETAILS,$strSiteName);
-#    ui_printline();
-#    ilog_printf(MSG_SOURCE_PATH, $documentRoot);
-
-}
+		ilog_printf(1,"$i:[$framework]:[$strSiteName]:[$documentRoot]");
+		ilog_printf(1,"\n");
+    	    }
+	    #    ui_printline();
+	    #    ilog_printf(MSG_SITE_DETAILS,$strSiteName);
+	    #    ui_printline();
+	    #    ilog_printf(MSG_SOURCE_PATH, $documentRoot);
+	}
 }
 
 sub pars_CreateReadinessReport
@@ -422,7 +423,7 @@ sub pars_CreateReadinessReport
     $osVersion =~ s/\n//g;
     $osVersion = 'LX: ' . $osVersion;
     $osVersion = substr($osVersion, 0, 50);
-    {
+    if(&utf_getRunMode() eq 'd'){
     	$g_selectedsite=$_[0];
     }
     $array[0][PUBLISH] = &pars_AskSelectSites(0);
@@ -517,7 +518,11 @@ sub pars_CreateReadinessReport
         if ($DEBUG_MODE) { ilog_print(1,"\nsite JSON:\n$json_text\n"); }
         $sIndex++;
     }
+
+    if(&utf_getRunMode() eq 'd'){
 	if( &pars_IsNoSiteSelected()) { return;}
+    }
+
     $json_text = encode_json ( \@rSites );
     my %appPool = ("Name"=>"DefaultLinuxAppPool","Enable32BitOn64"=>"false","IsClassicMode"=>"false","NetFxVersion"=>"4");
     my @appPools = ();
@@ -544,35 +549,50 @@ sub pars_CreateReadinessReport
         $req->content( $json_text );
 
         my $publishSuccess = FALSE;
-#        while (!$publishSuccess)
-        {
-            my $res = $ua->request($req);
-            my $rContent = $res->content;
-            my $rCode = $res->code;
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
 
-            if ($rCode !~ /^\s*2[0-9]*/)
+	if(&utf_getRunMode() eq 'i'){
+            while (!$publishSuccess)
             {
-                ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
-                my $strYesOrNo ="";
-#                while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                my $res = $ua->request($req);
+                my $rContent = $res->content;
+                my $rCode = $res->code;
+                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
+                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
+
+                if ($rCode !~ /^\s*2[0-9]*/)
                 {
-#                    ilog_printf(1, "    Would you like to retry uploading the readiness report? (Y/N):");
-#                    chomp($strYesOrNo = <STDIN>);
-#                    ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-#                        if ($strYesOrNo!~/^\s*[YynN]\s*$/);
-		    $strYesOrNo='n';
-                    $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
-                }
+                    ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
+                    my $strYesOrNo ="";
+                    while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                    {
+                        ilog_printf(1, "    Would you like to retry uploading the readiness report? (Y/N):");
+                        chomp($strYesOrNo = <STDIN>);
+                        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                            if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+                        $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
+                    }
+                } 
+                else
+                {
+                    $publishSuccess = TRUE;
+                }            
             }
-            else
-            {
-                $publishSuccess = TRUE;
-            }            
-        }
+	}
+	else{
+	       my $res = $ua->request($req);
+               my $rContent = $res->content;
+               my $rCode = $res->code;
+               if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
+               if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
+               if ($rCode !~ /^\s*2[0-9]*/)
+               {
+                   ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");
+	       }
+	}
 
-#        ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
+        if(&utf_getRunMode() eq 'i'){
+            ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
+        }
        
 	my $workingFolder = &pars_GetCurrentWorkingFolder();
         # write the readiness report to a file
@@ -605,35 +625,50 @@ sub pars_UploadPublishSettingsAllSites
         ilog_setLogInformation('INT_INFO',$recoveryFile,MSG_FILE_OPEN,'');
     }
 
-#    ilog_print(1,"\n\n");
-#    ui_printline();
-#    ilog_printf(1,"Please enter the location of the publish settings: \n");
-#    ui_printline();
     my $strPublishSettings =" ";
     my $fileFound = FALSE;
-#    while(!$fileFound)
-    {
-#       ilog_printf(1, "    Please enter the location of the publish settings: ");
-#        chomp($strPublishSettings = <STDIN>);
-	chomp($strPublishSettings = $_[0]);
+    
+    if(&utf_getRunMode() eq 'i'){
+       ilog_print(1,"\n\n");
+       ui_printline();
+       ilog_printf(1,"Please enter the location of the publish settings: \n");
+       ui_printline();
+
+       while(!$fileFound)
+       {
+           ilog_printf(1, "    Please enter the location of the publish settings: ");
+           chomp($strPublishSettings = <STDIN>);
+           eval
+           {
+               open PUBLISH_HANDLE ,$strPublishSettings or die 'ERR_FILE_OPEN';
+           };
+           if($@ && $@=~/ERR_FILE_OPEN/)
+           {
+               $fileFound = FALSE;
+           }
+           else
+           {
+               $fileFound = TRUE;
+               last;
+           }
+
+           ilog_print(0,ERR_INVALID_INPUT." Please enter a valid path for the publish settings\n")
+               if (!$fileFound);
+           close PUBLISH_HANDLE;        
+       }
+    }else{
+        chomp($strPublishSettings = $_[0]);
         eval
         {
             open PUBLISH_HANDLE ,$strPublishSettings or die 'ERR_FILE_OPEN';
         };
-        if($@ && $@=~/ERR_FILE_OPEN/)
-        {
-            $fileFound = FALSE;
+        if($@ && $@=~/ERR_FILE_OPEN/){
+            ilog_print(1,"Can't open the file $strPublishSettings\n");
+	    return 0;
         }
-        else
-        {
-            $fileFound = TRUE;
-            last;
-        }
-
-#        ilog_print(0,ERR_INVALID_INPUT." Please enter a valid path for the publish settings\n")
-#            if (!$fileFound);
-        close PUBLISH_HANDLE;        
+        close PUBLISH_HANDLE;
     }
+
     my $i;    
     for ($i = 0; $i <= $rowCount; $i++)
     {
@@ -660,7 +695,7 @@ sub pars_UploadPublishSettingsAllSites
     {
         ilog_setLogInformation('INT_INFO',$recoveryFile,MSG_FILE_CLOSE,'');
     }
-      ilog_print(1,"\nDone.\n");
+    ilog_print(1,"\nThanks for using the Apache to Azure App Service Migration Tool! \n");
     return 0; 
 }
 
@@ -732,15 +767,18 @@ sub pars_PublishSite
         {
             ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
             $strYesOrNo =" ";
-            while($strYesOrNo!~/^\s*[YynN]\s*$/)
-            {
-#                ilog_printf(1, "    Would you like to retry publishing the site [$strSiteName]? (Y/N):");
-#                chomp($strYesOrNo = <STDIN>);
-		chomp($strYesOrNo = 'n');
-#                ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-#                    if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+	    if(&utf_getRunMode() eq 'i'){
+                while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                {
+                    ilog_printf(1, "    Would you like to retry publishing the site [$strSiteName]? (Y/N):");
+                    chomp($strYesOrNo = <STDIN>);
+                    ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                        if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+                }
             }
-            
+	    else{
+	        chomp($strYesOrNo = 'n');
+            }
             $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
         }
         else
@@ -765,12 +803,12 @@ sub pars_PublishSite
         
         if ($tempSplit[0] =~ /pwd/i || $tempSplit[0] =~ /password/i)
         {
-		my $tempValue = $tempSplit[1];
-		for($i=2;$i <= $#tempSplit; $i++)
-		{
-			$tempValue = $tempValue."=".$tempSplit[$i];
-		}
-                $rPassword = $tempValue;
+	    my $tempValue = $tempSplit[1];
+	    for($i=2;$i <= $#tempSplit; $i++)
+	    {
+		$tempValue = $tempValue."=".$tempSplit[$i];
+	    }
+            $rPassword = $tempValue;
         }
         
         if ($tempSplit[0] =~ /server/i || $tempSplit[0] =~ /data source/i)
@@ -787,117 +825,118 @@ sub pars_PublishSite
     $publishSuccess = FALSE;
     while (!$publishSuccess)
     {
-if ($rUsername eq " " || !$array[$sIndex][MYSQL])
-{
-	ilog_print(1,"Don't detect the MYSQL DB in the source or The publish settings of the target do not contain MYSQL connection string\n");
-	ilog_print(1,"The MYSQL database for the site won't be moved if there is...\n");
-	ilog_print(1,"You can manually backup and move the database:\n");
-	ilog_print(1,"mysqldump --single-transaction -h <SrcDbHost> -u <SrcDbUser> -p'<SrcDbPass>' <SrcDbName> > mysqldump.sql\n");
-	ilog_print(1,"mysql -u <DstDbUser> -h <DstDbHost> -p'<DstDbPass>' <DstDbName> < mysqldump.sql\n");
-#	ilog_print(1,"You then can manually modify the DB connection setting in the PHP files at the target Azure WebApps...\n");
-}
+        if ($rUsername eq " " || !$array[$sIndex][MYSQL])
+        {
+	    ilog_print(1,"Don't detect the MYSQL DB in the source or The publish settings of the target do not contain MYSQL connection string\n");
+	    ilog_print(1,"The MYSQL database for the site won't be moved if there is...\n");
+	    ilog_print(1,"You can manually backup and move the database:\n");
+	    ilog_print(1,"mysqldump --single-transaction -h <SrcDbHost> -u <SrcDbUser> -p'<SrcDbPass>' <SrcDbName> > mysqldump.sql\n");
+	    ilog_print(1,"mysql -u <DstDbUser> -h <DstDbHost> -p'<DstDbPass>' <DstDbName> < mysqldump.sql\n");
+            #	ilog_print(1,"You then can manually modify the DB connection setting in the PHP files at the target Azure WebApps...\n");
+        }
         if ($array[$sIndex][MYSQL] && ($rUsername ne " "))
         {
-	my $workingFolder = &pars_GetCurrentWorkingFolder();
-	my @cfgFiles =@{$array[$sIndex][CONFIGFILE]};
-	my $dbName;
-	my $dbUser;
-	my $dbHost;
-	my $dbPass;
-	my $wpSiteurl;
+	    my $workingFolder = &pars_GetCurrentWorkingFolder();
+	    my @cfgFiles =@{$array[$sIndex][CONFIGFILE]};
+	    my $dbName;
+	    my $dbUser;
+	    my $dbHost;
+	    my $dbPass;
+	    my $wpSiteurl;
 	
-        rmtree(["$workingFolder/wwwroot"]);
-        mkdir "$workingFolder/wwwroot";
+            rmtree(["$workingFolder/wwwroot"]);
+            mkdir "$workingFolder/wwwroot";
 
-	foreach my $cfgFile (@cfgFiles)
-	{           # local settings read from config file
-            my $framework = $array[$sIndex][FRAMEWORK];
-	    &pars_readFrameworkSetting($framework,$cfgFile,$sIndex);
-            $dbName = $array[$sIndex][DB_NAME];
-            $dbUser = $array[$sIndex][DB_USER];
-            $dbHost = $array[$sIndex][DB_HOST];
-            $dbPass = $array[$sIndex][DB_PASS];
-            $wpSiteurl = $array[$sIndex][WP_SITEURL];
+	    foreach my $cfgFile (@cfgFiles)
+	    {           
+                # local settings read from config file
+                my $framework = $array[$sIndex][FRAMEWORK];
+	        &pars_readFrameworkSetting($framework,$cfgFile,$sIndex);
+                $dbName = $array[$sIndex][DB_NAME];
+                $dbUser = $array[$sIndex][DB_USER];
+                $dbHost = $array[$sIndex][DB_HOST];
+                $dbPass = $array[$sIndex][DB_PASS];
+                $wpSiteurl = $array[$sIndex][WP_SITEURL];
 
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG DB_SETTINGS: dbName: $dbName | dbUser: $dbUser | dbHost: $dbHost | dbPass: $dbPass\n wpSiteurl: $wpSiteurl | framework: $framework \n"); }
+                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG DB_SETTINGS: dbName: $dbName | dbUser: $dbUser | dbHost: $dbHost | dbPass: $dbPass\n wpSiteurl: $wpSiteurl | framework: $framework \n"); }
             
-            # read the config file of the framework
-            my $readCommand = "";
-            my $lineMatch;
-            my $lineNotMatch = "";
-            my $settingsLine;
+                # read the config file of the framework
+                my $readCommand = "";
+                my $lineMatch;
+                my $lineNotMatch = "";
+                my $settingsLine;
 
 
-               if(!pars_generateTransformRule($framework,$rDatabase,$rUsername,$rPassword,$rServer,$destinationAppUrl,$cfgFile))
-               {
+                if(!pars_generateTransformRule($framework,$rDatabase,$rUsername,$rPassword,$rServer,$destinationAppUrl,$cfgFile))
+                {
                    # we have a bug...
                    ilog_print(1,"\nERROR: Unrecognized framework: $framework\n");
                    return 0;
-               }
+                }
 
                ($lineMatch,$lineNotMatch,$settingsLine)=&pars_readTransformRule($framework,$cfgFile);
 
-            # START MUNGING
-            my @filesToCopy;
-            # this relocates files to be in the correct layout in the working folder
-            # the relocated files now end with _copy
-            @files = split /;/,$array[$sIndex][INCLUDED_FILES];
+               # START MUNGING
+               my @filesToCopy;
+               # this relocates files to be in the correct layout in the working folder
+               # the relocated files now end with _copy
+               @files = split /;/,$array[$sIndex][INCLUDED_FILES];
 
-            if ($DEBUG_MODE) { ilog_print(1,"\n>>>>getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, files);\nfiles: ".$array[$sIndex][INCLUDED_FILES]); }
+               if ($DEBUG_MODE) { ilog_print(1,"\n>>>>getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, files);\nfiles: ".$array[$sIndex][INCLUDED_FILES]); }
 
-            &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, \@files);
-            @files = File::Find::Rule->file()
-                ->name("*_copy")
-                ->in("$workingFolder/wwwroot");
-            for my $phpFile (@files)
-            {
-                my $settingsInserted = FALSE;
-                open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-                my $outFile = $phpFile;
-                $outFile =~ s/_copy//g;
-                open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
-                my $openBracket = FALSE;
-                while (my $line = <$fh>)
-                {
-                    if ($line =~ $lineMatch && ($lineNotMatch eq "" || $line !~ $lineNotMatch))
+               &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, \@files);
+               @files = File::Find::Rule->file()
+                   ->name("*_copy")
+                   ->in("$workingFolder/wwwroot");
+               for my $phpFile (@files)
+               {
+                    my $settingsInserted = FALSE;
+                    open my $fh, '<', $phpFile or die "Failed to open $_: $!";
+                    my $outFile = $phpFile;
+                    $outFile =~ s/_copy//g;
+                    open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
+                    my $openBracket = FALSE;
+                    while (my $line = <$fh>)
                     {
-                        if (!$settingsInserted)
+                        if ($line =~ $lineMatch && ($lineNotMatch eq "" || $line !~ $lineNotMatch))
                         {
-                            print $out $settingsLine;
-                            $settingsInserted = TRUE;
+                            if (!$settingsInserted)
+                            {
+                                print $out $settingsLine;
+                                $settingsInserted = TRUE;
+                                print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+                            }    
+                        
+                            $openBracket = TRUE;                            
+                        }
+
+                        if ($openBracket)
+                        {
                             print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
                         }
-                        
-                        $openBracket = TRUE;                            
-                    }
-
-                    if ($openBracket)
-                    {
-                        print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
-                    }
-                    else
-                    {
-                        print $out $line;
-                    }
+                        else
+                        {
+                            print $out $line;
+                        }
                     
-                    if ($openBracket && $line =~ ';')
-                    {
-                        $openBracket = FALSE;
-                    }
-                }
+                        if ($openBracket && $line =~ ';')
+                        {
+                            $openBracket = FALSE;
+                        }
+                    }   
 
-                close $fh;
-                close $out;
-                if (!$settingsInserted)
-                {
-                    # delete the file
-                    unlink $outFile;
-                }
+                    close $fh;
+                    close $out;
+                    if (!$settingsInserted)
+                    {
+                        # delete the file
+                        unlink $outFile;
+                    }
                 
-                # delete the _copy file
-                unlink $phpFile;
+                    # delete the _copy file
+                    unlink $phpFile;
+                }
             }
-         }
    
             @files = File::Find::Rule->file()
                 ->name("*.php")
@@ -914,16 +953,16 @@ if ($rUsername eq " " || !$array[$sIndex][MYSQL])
             my $password;
             # DUMP MYSQL
             my $retries = 0;
-            while($returnCode != 0 && $retries < 1)
+            while($returnCode != 0 && $retries < 5)
             {
                 ilog_print(1,"\nBacking up database on: $dbHost...\n");
-{ ilog_print(1,"mysqldump --single-transaction -h $dbHost -u $dbUser -p'dbPass' $dbName > workingFolder/mysqldump.sql\n\n"); }
+                { ilog_print(1,"mysqldump --single-transaction -h $dbHost -u $dbUser -p'dbPass' $dbName > $workingFolder/mysqldump.sql\n\n"); }
 
                 `mysqldump --single-transaction -h $dbHost -u $dbUser -p'$dbPass' $dbName > $workingFolder/mysqldump.sql`;
 
                 $returnCode = $?;
                 $retries++;
-                if ($returnCode != 0 && $retries < 2)
+                if ($returnCode != 0 && $retries < 5)
                 {
                     ilog_print(1,"\nreturncode: $returnCode\n");
 		    ilog_print(1,"mysqldump --single-transaction -h $dbHost -u $dbUser -p'dbPass' $dbName > workingFolder/mysqldump.sql\n"); 
@@ -943,10 +982,18 @@ if ($rUsername eq " " || !$array[$sIndex][MYSQL])
                 $strYesOrNo =" ";
 	        ilog_print(1, "mysql -u $rUsername -h $rServer -p'rPassword' $rDatabase < workingFolder/mysqldump.sql\n");	
 		ilog_print(1,"\nplease check and try moving databsae manually...\n");
-                while($strYesOrNo!~/^\s*[YynN]\s*$/)
-                {
-		     chomp($strYesOrNo='n ');
-                }
+		if(&utf_getRunMode() eq 'i'){
+                   while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                   {
+                       ilog_printf(1, "    Would you like to retry publishing the database for site [$strSiteName]? (Y/N):");
+                       chomp($strYesOrNo = <STDIN>);
+                       ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                          if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+                   }
+		}
+		else{
+		         chomp($strYesOrNo='n ');
+		}
                 
                 $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
             }
@@ -1127,7 +1174,7 @@ sub deployToSite
 
     my $nChunks = $filesize / $chunksize;
     my $chunkWidth = $barWidth / $nChunks;
-#    ilog_print(1,"\n");
+    ilog_print(1,"\n");
     my $nChunk = 0;
     my $readFunc = sub {        
         my $nBar = int($nChunk * $chunkWidth + 0.5);
@@ -1135,8 +1182,9 @@ sub deployToSite
         {
             $nBar = $barWidth;
         }
-        
-#        ilog_print(1,"[" . "=" x $nBar . " " x ($barWidth - $nBar) . "]\r");
+	if(&utf_getRunMode() eq 'i'){        
+            ilog_print(1,"[" . "=" x $nBar . " " x ($barWidth - $nBar) . "]\r");
+	}
         $nChunk++;
         read($fileZip, my $buf, $chunksize);
         return $buf;
@@ -1146,14 +1194,14 @@ sub deployToSite
     my $res = $ua->request($req);
     my $rContent = $res->content;
     my $rCode = $res->code;    
-#    ilog_print(1,"\n");
+    ilog_print(1,"\n");
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: content upload response code: $rCode\n"); }
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: content upload result: $rContent\n"); }
-    if(index($itemToAdd,'test01/wwwroot') != -1)
-    {
-    	ilog_print(1,"\nThe modfied php pages  published with response code: $rCode\nTo site: $publishUrl\n");
-    }	
-    else
+#    if(index($itemToAdd,'test01/wwwroot') != -1)
+#    {
+#    	ilog_print(1,"\nThe modfied php pages  published with response code: $rCode\nTo site: $publishUrl\n");
+#    }	
+#    else
     {
 
     	ilog_print(1,"\n$itemToAdd published with response code: $rCode\nTo site: $publishUrl\n");
@@ -1212,7 +1260,9 @@ sub pars_GetFileFromSource
 sub pars_Generate2D
 {   
     utf_setCurrentModuleName('PARSER');
-#    ilog_print(1,"\n\nParsing Apache conf file(s)... ");
+    if(&utf_getRunMode() eq 'i'){
+        ilog_print(1,"\n\nParsing Apache conf file(s)... ");
+    }
     ($configFile,$ResourceFile, $RecoveryMode) = @_;
 
     eval
@@ -1476,7 +1526,10 @@ sub pars_Generate2D
     # if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: GEN2D last index of array is: $#array"); }
     # this has the side effect of calling pars_siteHasValidFrameworkDb
     # which populates the global variable $array MYSQL, FRAMEWORK, and CONFIGFILE entries
-    if(defined $_[3])
+    if(&utf_getRunMode() eq 'i'){
+        &pars_CreateReadinessReport();
+    }
+    elsif(&utf_getRunMode() eq 'd')
     {
     	&pars_CreateReadinessReport($_[3]);
     }
@@ -4960,15 +5013,18 @@ sub pars_siteHasValidFrameworkDb
     if (!$array[$sIndex][MYSQL])
     {
         my $strYesOrNo =" ";
-#        while($strYesOrNo!~/^\s*[YynN]\s*$/)
-        {
-#            ilog_printf(1, "\n    $framework site detected, would you like to automatically create and migrate the database [$strSiteName]? (Y/N):");
-#            chomp($strYesOrNo = <STDIN>);
-	     $strYesOrNo = ($sIndex == $g_selectedsite)?'y':'n';
-#            ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-#                if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+        if(&utf_getRunMode() eq 'i'){
+            while($strYesOrNo!~/^\s*[YynN]\s*$/)
+            {    
+                ilog_printf(1, "\n    $framework site detected, would you like to automatically create and migrate the database [$strSiteName]? (Y/N):");
+                chomp($strYesOrNo = <STDIN>);
+                ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                    if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+            }
         }
-        
+	else{
+            $strYesOrNo = ($sIndex == $g_selectedsite)?'y':'n';
+        }        
         $array[$sIndex][MYSQL] = ($strYesOrNo=~/^\s*[Yy]\s*$/);
     }
     else
@@ -5114,20 +5170,24 @@ sub pars_AskSelectSites
     }
 
     $array[$sIndex][MYSQL] = 0;
-#    my $promptyn;    
-#    ilog_print(1,"\n\n");
-#    ui_printline();
-#    ilog_printf(MSG_SITE_DETAILS,$strSiteName);
-#    ui_printline();
-#    ilog_printf(MSG_SOURCE_PATH, $documentRoot);
-    $strYesOrNo =" ";
-#    while($strYesOrNo!~/^\s*[YynN]\s*$/)
-    {           
-#        ilog_printf(MSG_MIGRATE_SITE, $strSiteName);
-#        chomp($strYesOrNo = <STDIN>);
-#        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO) 
-#            if ($strYesOrNo!~/^\s*[YynN]\s*$/);
-      $strYesOrNo = ($sIndex == $g_selectedsite)? 'y':'n';
+    if(&utf_getRunMode() eq 'i'){
+        my $promptyn;    
+        ilog_print(1,"\n\n");
+        ui_printline();
+        ilog_printf(MSG_SITE_DETAILS,$strSiteName);
+        ui_printline();
+        ilog_printf(MSG_SOURCE_PATH, $documentRoot);
+        $strYesOrNo =" ";
+        while($strYesOrNo!~/^\s*[YynN]\s*$/)
+        {           
+            ilog_printf(MSG_MIGRATE_SITE, $strSiteName);
+            chomp($strYesOrNo = <STDIN>);
+            ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO) 
+                if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+        }
+    }
+    else{
+         $strYesOrNo = ($sIndex == $g_selectedsite)? 'y':'n';
     }
     return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
 

@@ -72,7 +72,8 @@ sub pars_FirstPass
     $strUserDir = "public_html";
     
     utf_setCurrentModuleName(MOD_PARS1);    # Set module Name for status logging...
-    ui_printBanner();
+    
+    ui_printBanner() if(&utf_getRunMode() eq 'i');
     
     #**************************************************************	
     # Parse every file avilable in the parse file list.
