@@ -38,21 +38,29 @@ my  $REC_MY_NAME_VIRTUAL_HOST ='[NAME_VIRTUAL_HOST]' ;
 sub auth_main                                               
 {
     ui_clearScreen();         #used to clear screen defined in aamt_userinterface.pm file
-	ui_Title();               #used for title of the migartion kit defined in aamt_userinterface.pm file	
+    ui_Title() if(&utf_getRunMode() eq 'i');             #used for title of the migartion kit defined in aamt_userinterface.pm file
+
     if (!&auth_isUserRoot())
     {
         return (0, 0);
     }
 
-    ui_printBanner();
-	&ilog_print(1,TITLE_SESSION_NAME);                      #To display title pertaining to session name    
-	($tempretval,$sessionName)=auth_inputSessionName();     #user input "session name" for migration   
-	if(!($tempretval))
+    if(&utf_getRunMode() eq 'i'){
+        ui_printBanner();
+        &ilog_print(1,TITLE_SESSION_NAME);                      #To display title pertaining to session name
+       ($tempretval,$sessionName)=auth_inputSessionName();     #user input "session name" for migration
+    }
+    else
+    {
+	($tempretval,$sessionName)=auth_inputSessionName($_[0]);     #user input "session name" for migration   
+    }
+
+    if(!($tempretval))
     {
         $auqRetVal=0;
         return($auqRetVal,0);
     }
-	else
+    else
     {
         ilog_setSessionName($sessionName);              #set session name for the migration  
     }
@@ -94,9 +102,10 @@ sub auth_main
 			$auqRetVal=0; 
 			return ($auqRetVal,0); #return FALSE
 		}
-
-		ui_printBanner("Source Configuration Details\n");
-        &ilog_print(1,TITLE_SOURCE_IP);                    #Source IP keyword    
+        if(&utf_getRunMode() eq 'i'){
+    	    ui_printBanner("Source Configuration Details\n");
+            &ilog_print(1,TITLE_SOURCE_IP);                    #Source IP keyword    
+        }
         $sourceMachineAddress = 'localhost';
 
         $logFilereturn= ilog_setLogInformation('REC_INFO',REC_SOURCE_IP.REC_ADD_EQUAL,$sourceMachineAddress,'');
@@ -118,7 +127,12 @@ sub auth_main
             return ($auqRetVal,0); #return FALSE
         }
 
-        ($tempretval,$filePath)=auth_inputFilePath();      # Http configuration file path of the source machine
+        if(&utf_getRunMode() eq 'i'){
+            ($tempretval,$filePath)=auth_inputFilePath();      # Http configuration file path of the source machine
+        }
+        else{
+            ($tempretval,$filePath)=auth_inputFilePath($_[1]);      # Http configuration file path of the source machine
+        }
         if($tempretval)
         {                
             $auqRetVal =1;                                 #Success of AUQ module
@@ -260,8 +274,13 @@ sub auth_inputParam
     #supposed to be visible or hidden
 	# if($Visibleflag eq "VISIBLE")
     # {
-		ilog_print(1,$PromptMsg);
-		chomp($Value = <STDIN>);					                    #input the value
+                if(&utf_getRunMode() eq 'i'){
+ 		    ilog_print(1,$PromptMsg);
+                    chomp($Value = <STDIN>);                                                            #input the value
+                }
+                else{
+		    chomp($Value = $DefaultVal);					                    #input the value
+                }  
 		$Value =~ s/^\s+//;
 		$Value =~ s/\s+$//;		
 		$Value = ltrim($Value);
@@ -567,16 +586,21 @@ sub auth_displaySessionFile
 #
 #Return Value   :	1. TRUE / FALSE
 #---------------------------------------------------------------------------------
-sub auth_inputSessionName()
+sub auth_inputSessionName
 {	
 	my $count; #Count for maximum number of attempts is reset to 0	
 	$count = 0;
 	$tempretval = 0;	
 	my $specialCharPattern = "[a-zA-Z0-9-_]"; # Allowed in directory creation
-	while ($count < MAXTRIES )
+    while ($count < MAXTRIES )
     {
-        ilog_print(1,CON_SESSION_NAME);
-        chop($sessionName=<STDIN>);
+        if(&utf_getRunMode() eq 'i'){
+            ilog_print(1,CON_SESSION_NAME);
+            chop($sessionName=<STDIN>);
+        }
+        else{
+	    $sessionName=$_[0];
+        }
         $sessionName =~ s/^\s+//;
         $sessionName =~ s/\s+$//;        
         $sessionName=ltrim($sessionName);        
@@ -625,7 +649,12 @@ sub auth_inputFilePath
 	$tempretval=0;
 	while ($count < MAXTRIES )
     {
-        ($tempretval,$filePath) = auth_inputParam(CON_HTTPD_PATH,DEFAULT_HTTPD_PATH,'VISIBLE','F','0');
+        if(&utf_getRunMode() eq 'i'){
+            ($tempretval,$filePath) = auth_inputParam(CON_HTTPD_PATH,DEFAULT_HTTPD_PATH,'VISIBLE','F','0');
+        }
+        else{
+            ($tempretval,$filePath) = auth_inputParam(CON_HTTPD_PATH,$_[0],'VISIBLE','F','0');
+        }
         if($tempretval) 
         {
             $return = auth_getConfFile($filePath);
@@ -681,8 +710,13 @@ sub auth_resumeMigrate()
 	my $exitVal;
 	while ($count < MAXTRIES )
     {
-        ilog_print(1,$messageString);
-        chop($resumemigrate=<STDIN>);    # user input
+        if(&utf_getRunMode() eq 'i'){
+            ilog_print(1,$messageString);
+            chop($resumemigrate=<STDIN>);    # user input
+        }
+        else{
+	    chop($resumemigrate='y');
+        }
         $resumemigrate =~ s/^\s+//;
         $resumemigrate =~ s/\s+$//;
         $resumemigrate=ltrim($resumemigrate);

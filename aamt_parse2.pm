@@ -65,13 +65,8 @@ my $mimeFlag = 1;
 my @errorDocument;
 my $errorDocumentCount = 0;
 my $virtUserdir = 0;
-
-# get the current working folder
-my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-#get session name
-my $strSessionName = &ilog_getSessionName();
-#form the complete working folder
-my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+my $g_selectedsite;
+my $g_nositeselected=1;
 
 #----------------------------------------------------------------------------------------------------------------------
 $siteIndex[0]  = 'SITENAME';
@@ -145,6 +140,17 @@ $siteIndex[67] = 'HOST';
 $siteIndex[68] = 'FILES';
 $siteIndex[69] = 'SITEURL';
 
+sub pars_IsNoSiteSelected
+{
+	return $g_nositeselected;
+}
+sub pars_GetCurrentWorkingFolder
+{
+    my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+    my $strSessionName = &ilog_getSessionName();
+    return $strCurWorkingFolder . '/' . $strSessionName;
+}
+
 ######################################################################################
 #Sub        : pars_GetDirlistinght
 #Purpose    : Used to get a complete recuresive listing of the input Document root
@@ -155,6 +161,245 @@ sub pars_GetDirlistinght
 {
     my $DocumentRoot = shift;
     return `ls -lRa $DocumentRoot 2>/dev/null`;
+}
+
+sub pars_DetectFramework
+{
+    my $documentRoot = shift;
+    my $framework=""; 
+    if (!(-d $documentRoot))
+    {
+        # TODO: why is this empty??
+        return "Unknown";
+    }
+    my @files;
+    my $workingFolder = &utf_getCurrentWorkingFolder();
+    my $deffile=$workingFolder.'/framework.def';
+    open my $fh,'<',$deffile or die "can't open $deffile";
+    while( my $line = <$fh>)
+    {
+	my @tmpsplit = split('=',$line);
+	my $tmpfwork=$tmpsplit[0];
+	my @patterns = split(';',$tmpsplit[1]);
+	$tmpfwork =~ s/\s+$//;
+	foreach my $pattern (@patterns)
+	{
+		$pattern =~ s/^\s+//;
+		$pattern =~ s/\s+$//;
+		$pattern =~ s/[\r\n]+//;
+		@files = File::Find::Rule->file()
+                	->name($pattern)
+                	->extras({ follow => 1 })
+                	->in($documentRoot);
+		if (@files > 0)
+		{
+			$framework=$tmpfwork;
+		}
+		else
+		{
+			$framework='';	
+			last;
+		}	
+	}
+	if($framework) 
+	{
+		$line=<$fh>;
+		@tmpsplit = split('=',$line);
+		my $list=@tmpsplit[1];
+		$list =~ s/^\s+//;
+		$list =~ s/\s+$//;
+		$list =~ s/[\r\n]+//;
+		my @lists = split(';',$list);
+                @files = File::Find::Rule->file()
+                        ->exec(
+			sub{
+				foreach my $file (@lists)
+				{
+					if($_ eq $file)
+					{
+						return 1;
+					}
+				}
+				return 0;
+			}
+			)
+                        ->extras({ follow => 1 })
+                        ->in($documentRoot);
+		last;
+	}
+	else
+	{
+		$line=<$fh>;
+	}
+    }
+   
+    if (!$framework || !@files)
+    {
+	return ("Unknown",'');
+    }
+    else
+    {
+	return ($framework,@files);
+    }
+}
+
+sub pars_generateFrameworkSetting
+{
+    my $framework = shift;
+    my $configFile = shift;
+    my $filename = &basename($configFile);
+    my $workingFolder = &utf_getCurrentWorkingFolder();
+    my $deffile=$workingFolder.'/readphp.def';
+    my $sessionname = &ilog_getSessionName();
+    open my $fh,'<',$deffile or die "can't open $deffile";
+    while( my $line = <$fh>)
+    {
+        my @tmpsplit = split('=',$line);
+        my $phpread = $tmpsplit[1];
+        $phpread =~ s/^\s+//;
+        $phpread =~ s/\s+$//;
+        $phpread =~ s/[\r\n]+//;
+        my $tmpfwork=$tmpsplit[0];
+        $tmpfwork =~ s/\s+$//;
+	if ($framework eq $tmpfwork)
+	{
+        	`php $phpread "$configFile" "$workingFolder/$sessionname/${framework}-${filename}-settings.txt";`;
+		return 1;
+	}
+	
+    }
+    return 0;
+}
+
+sub pars_readFrameworkSetting
+{
+    my $framework = shift;
+    my $configFile = shift;
+    my $filename=&basename($configFile);
+    my $sIndex = shift;
+    my $workingFolder = &utf_getCurrentWorkingFolder();
+    my $sessionname = &ilog_getSessionName();
+
+    open my $settingfile, '<', "$workingFolder/$sessionname/${framework}-${filename}-settings.txt" or die "Can't read ${framework}-${filename}-settings.txt: $!";
+  
+    while (my $line = <$settingfile>)
+    {
+        my @tempSplit = split('=', $line);
+        my $tempValue = @tempSplit[1];
+        for($i=2;$i <= $#tempSplit; $i++)
+        {
+                $tempValue = $tempValue."=".$tempSplit[$i];
+        }
+        chomp($tempValue);
+        if ($line =~ /DB_NAME/)
+        {
+            $array[$sIndex][DB_NAME] = $tempValue;
+        }
+        if ($line =~ /DB_USER/)
+        {
+            $array[$sIndex][DB_USER] = $tempValue;
+        }
+        if ($line =~ /DB_PASSWORD/)
+        {
+            $array[$sIndex][DB_PASS] = $tempValue;
+        }
+        if ($line =~ /DB_HOST/)
+        {
+            $array[$sIndex][DB_HOST] = $tempValue;
+        }
+        if ($line =~ /WP_SITEURL/)
+        {
+            $array[$sIndex][WP_SITEURL] = $tempValue;
+        }
+        if ($line =~ /INCLUDED_FILES/)
+        {
+            # @files = split /;/,$tempValue;
+            $array[$sIndex][INCLUDED_FILES] = $tempValue;
+        }
+    }
+
+}
+
+sub pars_generateTransformRule
+{
+	my $framework=$_[0];
+	my $rDatabase=$_[1];
+	my $rUsername=$_[2];
+	my $rPassword=$_[3];
+	my $rServer=$_[4];
+	my $rTargetUrl=$_[5];
+	my $configFile=&basename($_[6]);
+	    my $workingFolder = &utf_getCurrentWorkingFolder();
+    	    my $sessionname = &ilog_getSessionName();
+            my $deffile=$workingFolder.'/writephp.def';
+            open my $fh,'<',$deffile or die "can't open $deffile";
+            while( my $line = <$fh>)
+            {
+                my @tmpsplit = split('=',$line);
+		my $phpwrite = $tmpsplit[1];
+        	$phpwrite =~ s/^\s+//;
+        	$phpwrite =~ s/\s+$//;
+        	$phpwrite =~ s/[\r\n]+//;
+                my $tmpfwork=$tmpsplit[0];
+                $tmpfwork =~ s/\s+$//;
+                if($framework eq $tmpfwork)
+                {
+	                #ilog_printf(1,"php $phpwrite "."$workingFolder/$sessionname/${framework}-transform.txt $rDatabase $rUsername $rPassword $rServer $rTargetUrl");
+			`php $phpwrite "$workingFolder/$sessionname/${framework}-${configFile}-transform.txt" "$rDatabase" "$rUsername" "$rPassword" "$rServer" "$rTargetUrl" "$configFile";`;
+                        return 1;
+                }
+            }
+        return 0;
+}
+
+sub pars_readTransformRule()
+{
+	my $framework=shift;
+	my $configFile=&basename(shift);
+        my $workingFolder = &utf_getCurrentWorkingFolder();
+        my $sessionname = &ilog_getSessionName();
+	my $ruleFile = "$workingFolder/$sessionname/${framework}-${configFile}-transform.txt";
+	open my $fh,'<',$ruleFile or die "can't open $ruleFile";
+	my $lineMatch = <$fh>;
+	$lineMatch =~ s/[\r\n]+//;
+	my $lineNotMatch = <$fh>;
+	$lineNotMatch =~ s/[\r\n]+//;
+	my $settingsLine ="";
+	while( my $line = <$fh>)
+	{
+		$settingsLine=$settingsLine.$line;	
+	}	
+	if($lineNotMatch){
+	    return (qr/$lineMatch/,qr/$lineNotMatch/,$settingsLine);
+        }   
+	else{
+	    return (qr/$lineMatch/,$lineNotMatch,$settingsLine);
+        }
+}
+
+sub pars_DisplaySites
+{
+	my $i;
+	my $sIndex = shift;
+	my $strSiteName = $array[$sIndex][SITENAME];
+	my $documentRoot = $array[$sIndex][DOCUMENTROOT];
+	my $framework;
+	my @files;
+	for ($i=0;$i <= $rowCount; $i++)
+	{
+    	    $strSiteName = $array[$i][SITENAME];
+    	    $documentRoot = $array[$i][DOCUMENTROOT];
+    	    ($framework,@files) = &pars_DetectFramework($documentRoot);
+    	    {
+
+		ilog_printf(1,"$i:[$framework]:[$strSiteName]:[$documentRoot]");
+		ilog_printf(1,"\n");
+    	    }
+	    #    ui_printline();
+	    #    ilog_printf(MSG_SITE_DETAILS,$strSiteName);
+	    #    ui_printline();
+	    #    ilog_printf(MSG_SOURCE_PATH, $documentRoot);
+	}
 }
 
 sub pars_CreateReadinessReport
@@ -178,6 +423,9 @@ sub pars_CreateReadinessReport
     $osVersion =~ s/\n//g;
     $osVersion = 'LX: ' . $osVersion;
     $osVersion = substr($osVersion, 0, 50);
+    if(&utf_getRunMode() eq 'd'){
+    	$g_selectedsite=$_[0];
+    }
     $array[0][PUBLISH] = &pars_AskSelectSites(0);
     if ($array[0][PUBLISH])
     {
@@ -230,7 +478,8 @@ sub pars_CreateReadinessReport
             my $dbUser = $array[$i][DB_USER];
             my $dbHost = $array[$i][DB_HOST];
             my $dbPassword = $array[$i][DB_PASS];
-
+	    die "Didn't get MYSQL password...\n" if(!$dbPassword);
+     	
             $database{"ConnectionStringName"} = "MySQLConnection";
             $database{"ProviderName"} = "MySql.Data.MySqlClient";
             # size of the database
@@ -269,7 +518,11 @@ sub pars_CreateReadinessReport
         if ($DEBUG_MODE) { ilog_print(1,"\nsite JSON:\n$json_text\n"); }
         $sIndex++;
     }
-    
+
+    if(&utf_getRunMode() eq 'd'){
+	if( &pars_IsNoSiteSelected()) { return;}
+    }
+
     $json_text = encode_json ( \@rSites );
     my %appPool = ("Name"=>"DefaultLinuxAppPool","Enable32BitOn64"=>"false","IsClassicMode"=>"false","NetFxVersion"=>"4");
     my @appPools = ();
@@ -296,35 +549,52 @@ sub pars_CreateReadinessReport
         $req->content( $json_text );
 
         my $publishSuccess = FALSE;
-        while (!$publishSuccess)
-        {
-            my $res = $ua->request($req);
-            my $rContent = $res->content;
-            my $rCode = $res->code;
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
 
-            if ($rCode !~ /^\s*2[0-9]*/)
+	if(&utf_getRunMode() eq 'i'){
+            while (!$publishSuccess)
             {
-                ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
-                my $strYesOrNo ="";
-                while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                my $res = $ua->request($req);
+                my $rContent = $res->content;
+                my $rCode = $res->code;
+                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
+                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
+
+                if ($rCode !~ /^\s*2[0-9]*/)
                 {
-                    ilog_printf(1, "    Would you like to retry uploading the readiness report? (Y/N):");
-                    chomp($strYesOrNo = <STDIN>);
-                    ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-                        if ($strYesOrNo!~/^\s*[YynN]\s*$/);
-                    $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
-                }
+                    ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
+                    my $strYesOrNo ="";
+                    while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                    {
+                        ilog_printf(1, "    Would you like to retry uploading the readiness report? (Y/N):");
+                        chomp($strYesOrNo = <STDIN>);
+                        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                            if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+                        $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
+                    }
+                } 
+                else
+                {
+                    $publishSuccess = TRUE;
+                }            
             }
-            else
-            {
-                $publishSuccess = TRUE;
-            }            
-        }
+	}
+	else{
+	       my $res = $ua->request($req);
+               my $rContent = $res->content;
+               my $rCode = $res->code;
+               if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report response code: $rCode\n"); }
+               if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Readiness report result\n: $rContent\n"); }
+               if ($rCode !~ /^\s*2[0-9]*/)
+               {
+                   ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");
+	       }
+	}
 
-        ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
-        
+        if(&utf_getRunMode() eq 'i'){
+            ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
+        }
+       
+	my $workingFolder = &pars_GetCurrentWorkingFolder();
         # write the readiness report to a file
         my $outFile = "$workingFolder/readinessreport.json";
         open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
@@ -355,40 +625,57 @@ sub pars_UploadPublishSettingsAllSites
         ilog_setLogInformation('INT_INFO',$recoveryFile,MSG_FILE_OPEN,'');
     }
 
-    ilog_print(1,"\n\n");
-    ui_printline();
-    ilog_printf(1,"Please enter the location of the publish settings: \n");
-    ui_printline();
     my $strPublishSettings =" ";
     my $fileFound = FALSE;
-    while(!$fileFound)
-    {
-        ilog_printf(1, "    Please enter the location of the publish settings: ");
-        chomp($strPublishSettings = <STDIN>);
+    
+    if(&utf_getRunMode() eq 'i'){
+       ilog_print(1,"\n\n");
+       ui_printline();
+       ilog_printf(1,"Please enter the location of the publish settings: \n");
+       ui_printline();
+
+       while(!$fileFound)
+       {
+           ilog_printf(1, "    Please enter the location of the publish settings: ");
+           chomp($strPublishSettings = <STDIN>);
+           eval
+           {
+               open PUBLISH_HANDLE ,$strPublishSettings or die 'ERR_FILE_OPEN';
+           };
+           if($@ && $@=~/ERR_FILE_OPEN/)
+           {
+               $fileFound = FALSE;
+           }
+           else
+           {
+               $fileFound = TRUE;
+               last;
+           }
+
+           ilog_print(0,ERR_INVALID_INPUT." Please enter a valid path for the publish settings\n")
+               if (!$fileFound);
+           close PUBLISH_HANDLE;        
+       }
+    }else{
+        chomp($strPublishSettings = $_[0]);
         eval
         {
             open PUBLISH_HANDLE ,$strPublishSettings or die 'ERR_FILE_OPEN';
         };
-        if($@ && $@=~/ERR_FILE_OPEN/)
-        {
-            $fileFound = FALSE;
+        if($@ && $@=~/ERR_FILE_OPEN/){
+            ilog_print(1,"Can't open the file $strPublishSettings\n");
+	    return 0;
         }
-        else
-        {
-            $fileFound = TRUE;
-            last;
-        }
-
-        ilog_print(0,ERR_INVALID_INPUT." Please enter a valid path for the publish settings\n")
-            if (!$fileFound);
-        close PUBLISH_HANDLE;        
+        close PUBLISH_HANDLE;
     }
-        
+
+    my $i;    
     for ($i = 0; $i <= $rowCount; $i++)
     {
         if ($array[$i][PUBLISH])
         {
             &pars_UploadPublishSettings($strPublishSettings, $i);
+#	    break;
         }
     }
 
@@ -408,7 +695,6 @@ sub pars_UploadPublishSettingsAllSites
     {
         ilog_setLogInformation('INT_INFO',$recoveryFile,MSG_FILE_CLOSE,'');
     }
-
     ilog_print(1,"\nThanks for using the Apache to Azure App Service Migration Tool! \n");
     return 0; 
 }
@@ -420,7 +706,7 @@ sub pars_UploadPublishSettings
         
     my $strSiteName = $array[$sIndex][SITENAME];
     my $strYesOrNo = "";
-    ilog_print(1,"\n\n");
+   # ilog_print(1,"\n\n");
     ui_printline();
     ilog_printf(1,"[ $strSiteName ] - Site Publishing \n");
     ui_printline();
@@ -458,8 +744,9 @@ sub pars_PublishSite
         my $data = $xml->XMLin($strPublishSettings, ForceArray => ['publishProfile']);
         for my $entry (@{$data->{publishProfile}})
         {
-            my $key = $entry->{originalsitename};
-            if ($key eq $rComputername.":".$strSiteName)
+	    my $key = $entry->{publishMethod};
+
+	    if ($key eq "MSDeploy")
             {
                 $publishUrl = $entry->{publishUrl};
                 $userName = $entry->{userName};
@@ -480,14 +767,18 @@ sub pars_PublishSite
         {
             ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
             $strYesOrNo =" ";
-            while($strYesOrNo!~/^\s*[YynN]\s*$/)
-            {
-                ilog_printf(1, "    Would you like to retry publishing the site [$strSiteName]? (Y/N):");
-                chomp($strYesOrNo = <STDIN>);
-                ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-                    if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+	    if(&utf_getRunMode() eq 'i'){
+                while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                {
+                    ilog_printf(1, "    Would you like to retry publishing the site [$strSiteName]? (Y/N):");
+                    chomp($strYesOrNo = <STDIN>);
+                    ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                        if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+                }
             }
-            
+	    else{
+	        chomp($strYesOrNo = 'n');
+            }
             $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
         }
         else
@@ -499,7 +790,7 @@ sub pars_PublishSite
 
     # Remote database variables
     my $rServer;
-    my $rUsername;
+    my $rUsername=" ";
     my $rPassword;
     my $rDatabase;
     for my $section (split(';', $mySqlConnectionString))
@@ -512,7 +803,12 @@ sub pars_PublishSite
         
         if ($tempSplit[0] =~ /pwd/i || $tempSplit[0] =~ /password/i)
         {
-            $rPassword = $tempSplit[1];
+	    my $tempValue = $tempSplit[1];
+	    for($i=2;$i <= $#tempSplit; $i++)
+	    {
+		$tempValue = $tempValue."=".$tempSplit[$i];
+	    }
+            $rPassword = $tempValue;
         }
         
         if ($tempSplit[0] =~ /server/i || $tempSplit[0] =~ /data source/i)
@@ -529,115 +825,119 @@ sub pars_PublishSite
     $publishSuccess = FALSE;
     while (!$publishSuccess)
     {
-        if ($array[$sIndex][MYSQL])
+        if ($rUsername eq " " || !$array[$sIndex][MYSQL])
         {
-            # local settings read from config file
-            my $dbName = $array[$sIndex][DB_NAME];
-            my $dbUser = $array[$sIndex][DB_USER];
-            my $dbHost = $array[$sIndex][DB_HOST];
-            my $dbPass = $array[$sIndex][DB_PASS];
-            my $wpSiteurl = $array[$sIndex][WP_SITEURL];
-            my $framework = $array[$sIndex][FRAMEWORK];
-
-            if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG DB_SETTINGS: dbName: $dbName | dbUser: $dbUser | dbHost: $dbHost | dbPass: $dbPass\n wpSiteurl: $wpSiteurl | framework: $framework \n"); }
-            
-            # read the config file of the framework
-            my $readCommand = "";
-            my $lineMatch;
-            my $lineNotMatch = "";
-            my $settingsLine;
-            if ($framework eq WORDPRESS)
-            {
-                my $wpsubdir = $array[$sIndex][CONFIGFILE];
-                my $documentRoot2 = quotemeta($documentRoot);
-                $wpsubdir =~ s/$documentRoot2//g;
-                $wpsubdir =~ s/wp-config.php//g;                
-                $lineMatch = qr/define.*'DB_NAME'|define.*'DB_USER'|define.*'DB_PASSWORD'|define.*'DB_HOST'|define\s*\(\s*'WP_CONTENT_DIR'/;
-                $lineNotMatch = qr/define\s*\(\s*'WP_CONTENT_DIR',\s*ABSPATH\s*.\s*'wp-content'\s*\)/;
-                $settingsLine = "define('DB_NAME', '$rDatabase');\ndefine('DB_USER', '$rUsername');\ndefine('DB_PASSWORD', '$rPassword');"
-                    . "\ndefine('DB_HOST', '$rServer');\ndefine('WP_HOME','${destinationAppUrl}${wpsubdir}'); \ndefine('WP_SITEURL','${destinationAppUrl}${wpsubdir}');\n";
-            }
-            elsif ($framework eq DRUPAL)
-            {
-                # TODO: improve drupal detection logic
-                $lineMatch = qr/databases.*'default'.*'default'/;
-                $settingsLine = "\$databases['default']['default']=array('driver'=>'mysql','database' =>'$rDatabase','username'=>'$rUsername','password'=>'$rPassword','host'=>'$rServer','port' => '','prefix' => '');\n";
-            }
-            elsif ($framework eq JOOMLA)
-            {
-                $settingsLine = "public \$db = '$rDatabase';\npublic \$user = '$rUsername';\npublic \$password = '$rPassword';\npublic \$host = '$rServer';\n";
-                $lineMatch = qr/\$db\s*=|\$user\s*=|\$password\s*=|\$host\s*=/
-            }
-            else
-            {
-                # we have a bug...
-                ilog_print(1,"\nERROR: Unrecognized framework: $framework\n");
-                return 0;
-            }
-
-            # START MUNGING
+	    ilog_print(1,"Don't detect the MYSQL DB in the source or The publish settings of the target do not contain MYSQL connection string\n");
+	    ilog_print(1,"The MYSQL database for the site won't be moved if there is...\n");
+	    ilog_print(1,"You can manually backup and move the database:\n");
+	    ilog_print(1,"mysqldump --single-transaction -h <SrcDbHost> -u <SrcDbUser> -p'<SrcDbPass>' <SrcDbName> > mysqldump.sql\n");
+	    ilog_print(1,"mysql -u <DstDbUser> -h <DstDbHost> -p'<DstDbPass>' <DstDbName> < mysqldump.sql\n");
+            #	ilog_print(1,"You then can manually modify the DB connection setting in the PHP files at the target Azure WebApps...\n");
+        }
+        if ($array[$sIndex][MYSQL] && ($rUsername ne " "))
+        {
+	    my $workingFolder = &pars_GetCurrentWorkingFolder();
+	    my @cfgFiles =@{$array[$sIndex][CONFIGFILE]};
+	    my $dbName;
+	    my $dbUser;
+	    my $dbHost;
+	    my $dbPass;
+	    my $wpSiteurl;
+	
             rmtree(["$workingFolder/wwwroot"]);
             mkdir "$workingFolder/wwwroot";
-            my @filesToCopy;
-            # this relocates files to be in the correct layout in the working folder
-            # the relocated files now end with _copy
-            @files = split /;/,$array[$sIndex][INCLUDED_FILES];
 
-            if ($DEBUG_MODE) { ilog_print(1,"\n>>>>getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, files);\nfiles: ".$array[$sIndex][INCLUDED_FILES]); }
+	    foreach my $cfgFile (@cfgFiles)
+	    {           
+                # local settings read from config file
+                my $framework = $array[$sIndex][FRAMEWORK];
+	        &pars_readFrameworkSetting($framework,$cfgFile,$sIndex);
+                $dbName = $array[$sIndex][DB_NAME];
+                $dbUser = $array[$sIndex][DB_USER];
+                $dbHost = $array[$sIndex][DB_HOST];
+                $dbPass = $array[$sIndex][DB_PASS];
+                $wpSiteurl = $array[$sIndex][WP_SITEURL];
 
-            &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, \@files);
-            @files = File::Find::Rule->file()
-                ->name("*_copy")
-                ->in("$workingFolder/wwwroot");
-            for my $phpFile (@files)
-            {
-                my $settingsInserted = FALSE;
-                open my $fh, '<', $phpFile or die "Failed to open $_: $!";
-                my $outFile = $phpFile;
-                $outFile =~ s/_copy//g;
-                open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
-                my $openBracket = FALSE;
-                while (my $line = <$fh>)
+                if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG DB_SETTINGS: dbName: $dbName | dbUser: $dbUser | dbHost: $dbHost | dbPass: $dbPass\n wpSiteurl: $wpSiteurl | framework: $framework \n"); }
+            
+                # read the config file of the framework
+                my $readCommand = "";
+                my $lineMatch;
+                my $lineNotMatch = "";
+                my $settingsLine;
+
+
+                if(!pars_generateTransformRule($framework,$rDatabase,$rUsername,$rPassword,$rServer,$destinationAppUrl,$cfgFile))
                 {
-                    if ($line =~ $lineMatch && ($lineNotMatch eq "" || $line !~ $lineNotMatch))
+                   # we have a bug...
+                   ilog_print(1,"\nERROR: Unrecognized framework: $framework\n");
+                   return 0;
+                }
+
+               ($lineMatch,$lineNotMatch,$settingsLine)=&pars_readTransformRule($framework,$cfgFile);
+
+               # START MUNGING
+               my @filesToCopy;
+               # this relocates files to be in the correct layout in the working folder
+               # the relocated files now end with _copy
+               @files = split /;/,$array[$sIndex][INCLUDED_FILES];
+
+               if ($DEBUG_MODE) { ilog_print(1,"\n>>>>getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, files);\nfiles: ".$array[$sIndex][INCLUDED_FILES]); }
+
+               &getConfigFiles($documentRoot, $lineMatch, $lineNotMatch, \@files);
+               @files = File::Find::Rule->file()
+                   ->name("*_copy")
+                   ->in("$workingFolder/wwwroot");
+               for my $phpFile (@files)
+               {
+                    my $settingsInserted = FALSE;
+                    open my $fh, '<', $phpFile or die "Failed to open $_: $!";
+                    my $outFile = $phpFile;
+                    $outFile =~ s/_copy//g;
+                    open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
+                    my $openBracket = FALSE;
+                    while (my $line = <$fh>)
                     {
-                        if (!$settingsInserted)
+                        if ($line =~ $lineMatch && ($lineNotMatch eq "" || $line !~ $lineNotMatch))
                         {
-                            print $out $settingsLine;
-                            $settingsInserted = TRUE;
+                            if (!$settingsInserted)
+                            {
+                                print $out $settingsLine;
+                                $settingsInserted = TRUE;
+                                print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
+                            }    
+                        
+                            $openBracket = TRUE;                            
+                        }
+
+                        if ($openBracket)
+                        {
                             print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
                         }
-                        
-                        $openBracket = TRUE;                            
-                    }
-
-                    if ($openBracket)
-                    {
-                        print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
-                    }
-                    else
-                    {
-                        print $out $line;
-                    }
+                        else
+                        {
+                            print $out $line;
+                        }
                     
-                    if ($openBracket && $line =~ ';')
-                    {
-                        $openBracket = FALSE;
-                    }
-                }
+                        if ($openBracket && $line =~ ';')
+                        {
+                            $openBracket = FALSE;
+                        }
+                    }   
 
-                close $fh;
-                close $out;
-                if (!$settingsInserted)
-                {
-                    # delete the file
-                    unlink $outFile;
-                }
+                    close $fh;
+                    close $out;
+                    if (!$settingsInserted)
+                    {
+                        # delete the file
+                        unlink $outFile;
+                    }
                 
-                # delete the _copy file
-                unlink $phpFile;
+                    # delete the _copy file
+                    unlink $phpFile;
+                }
             }
-            
+   
             @files = File::Find::Rule->file()
                 ->name("*.php")
                 ->extras({ follow => 1 })
@@ -645,7 +945,9 @@ sub pars_PublishSite
             if (@files > 0)
             {
                 &deployToSite($publishUrl, "$workingFolder/wwwroot", $userName, $userPWD, TRUE);
-            }                
+            } 
+	    
+               
             my $returnCode = -1;
             my $database;
             my $password;
@@ -654,7 +956,8 @@ sub pars_PublishSite
             while($returnCode != 0 && $retries < 5)
             {
                 ilog_print(1,"\nBacking up database on: $dbHost...\n");
-                if ($DEBUG_MODE) { ilog_print(1,"\nmysqldump --single-transaction -h $dbHost -u $dbUser -p'$dbPass' $dbName > $workingFolder/mysqldump.sql\n"); }
+                { ilog_print(1,"mysqldump --single-transaction -h $dbHost -u $dbUser -p'dbPass' $dbName > $workingFolder/mysqldump.sql\n\n"); }
+
                 `mysqldump --single-transaction -h $dbHost -u $dbUser -p'$dbPass' $dbName > $workingFolder/mysqldump.sql`;
 
                 $returnCode = $?;
@@ -662,26 +965,35 @@ sub pars_PublishSite
                 if ($returnCode != 0 && $retries < 5)
                 {
                     ilog_print(1,"\nreturncode: $returnCode\n");
+		    ilog_print(1,"mysqldump --single-transaction -h $dbHost -u $dbUser -p'dbPass' $dbName > workingFolder/mysqldump.sql\n"); 
                     sleep 1;
                 }
             }
 
             # RESTORE SQL
-            ilog_print(1,"\nMoving database...\n");
+            ilog_print(1,"\nMoving database to: $rServer...\n");
+	    ilog_print(1, "mysql -u $rUsername -h $rServer -p'rPassword' $rDatabase < workingFolder/mysqldump.sql\n\n");	
             `mysql -u $rUsername -h $rServer -p'$rPassword' $rDatabase < $workingFolder/mysqldump.sql`;
             $returnCode = $?;
             if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: returncode: $returnCode\n"); }
             if ($returnCode != 0)
             {
-                ilog_print(1,"\n\nPublishing failed with return code: $returnCode\n");                
+                ilog_print(1,"\nMoving failed with return code: $returnCode\n");                
                 $strYesOrNo =" ";
-                while($strYesOrNo!~/^\s*[YynN]\s*$/)
-                {
-                    ilog_printf(1, "    Would you like to retry publishing the database for site [$strSiteName]? (Y/N):");
-                    chomp($strYesOrNo = <STDIN>);
-                    ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-                        if ($strYesOrNo!~/^\s*[YynN]\s*$/);
-                }
+	        ilog_print(1, "mysql -u $rUsername -h $rServer -p'rPassword' $rDatabase < workingFolder/mysqldump.sql\n");	
+		ilog_print(1,"\nplease check and try moving databsae manually...\n");
+		if(&utf_getRunMode() eq 'i'){
+                   while($strYesOrNo!~/^\s*[YynN]\s*$/)
+                   {
+                       ilog_printf(1, "    Would you like to retry publishing the database for site [$strSiteName]? (Y/N):");
+                       chomp($strYesOrNo = <STDIN>);
+                       ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                          if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+                   }
+		}
+		else{
+		         chomp($strYesOrNo='n ');
+		}
                 
                 $publishSuccess = $strYesOrNo =~ /^\s*[Nn]\s*$/;
             }
@@ -696,7 +1008,7 @@ sub pars_PublishSite
             # No database to publish
             $publishSuccess = TRUE;
         }
-    }
+    }  
 }
 
 sub getConfigFiles
@@ -707,7 +1019,7 @@ sub getConfigFiles
     my $lineNotMatch = $_[2];
     # my $workingFolder = $_[3];
     my @files = @{$_[3]};
-
+	my $workingFolder = &pars_GetCurrentWorkingFolder();
     for my $phpFile (@files)
     {
         open my $fh, '<', $phpFile or die "Failed to open $_: $!";
@@ -835,10 +1147,7 @@ sub deployToSite
         # Add a file
         $zip->addFile($itemToAdd, $filename);
     }
-
-    # my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-    # my $strSessionName = &ilog_getSessionName();
-    # my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+	my $workingFolder = &pars_GetCurrentWorkingFolder();
     my $zipLocation = "$workingFolder/site-content.zip";
     if ( $zip->writeToFileNamed($zipLocation) != AZ_OK ) 
     {
@@ -854,6 +1163,7 @@ sub deployToSite
     $req->content_type('application/octet-stream');
     $req->content_length($filesize);
     $req->authorization_basic($userName, $userPWD);
+    ilog_print(1,"\n");
     ilog_print(1,"Publishing site...");
     my $barWidth = 100;    
     my $chunksize = 65536;
@@ -872,8 +1182,9 @@ sub deployToSite
         {
             $nBar = $barWidth;
         }
-        
-        ilog_print(1,"[" . "=" x $nBar . " " x ($barWidth - $nBar) . "]\r");
+	if(&utf_getRunMode() eq 'i'){        
+            ilog_print(1,"[" . "=" x $nBar . " " x ($barWidth - $nBar) . "]\r");
+	}
         $nChunk++;
         read($fileZip, my $buf, $chunksize);
         return $buf;
@@ -886,7 +1197,15 @@ sub deployToSite
     ilog_print(1,"\n");
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: content upload response code: $rCode\n"); }
     if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: content upload result: $rContent\n"); }
-    ilog_print(1,"\n$itemToAdd published with response code: $rCode\nTo site: $publishUrl\n");
+#    if(index($itemToAdd,'test01/wwwroot') != -1)
+#    {
+#    	ilog_print(1,"\nThe modfied php pages  published with response code: $rCode\nTo site: $publishUrl\n");
+#    }	
+#    else
+    {
+
+    	ilog_print(1,"\n$itemToAdd published with response code: $rCode\nTo site: $publishUrl\n");
+    }
     close $fileZip;
     return $rCode;
 }
@@ -941,7 +1260,9 @@ sub pars_GetFileFromSource
 sub pars_Generate2D
 {   
     utf_setCurrentModuleName('PARSER');
-    ilog_print(1,"\n\nParsing Apache conf file(s)... ");
+    if(&utf_getRunMode() eq 'i'){
+        ilog_print(1,"\n\nParsing Apache conf file(s)... ");
+    }
     ($configFile,$ResourceFile, $RecoveryMode) = @_;
 
     eval
@@ -1205,7 +1526,17 @@ sub pars_Generate2D
     # if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: GEN2D last index of array is: $#array"); }
     # this has the side effect of calling pars_siteHasValidFrameworkDb
     # which populates the global variable $array MYSQL, FRAMEWORK, and CONFIGFILE entries
-    &pars_CreateReadinessReport();
+    if(&utf_getRunMode() eq 'i'){
+        &pars_CreateReadinessReport();
+    }
+    elsif(&utf_getRunMode() eq 'd')
+    {
+    	&pars_CreateReadinessReport($_[3]);
+    }
+    else
+    {
+    	&pars_DisplaySites();
+    }
     return 1;
 }
 
@@ -4669,41 +5000,10 @@ sub pars_siteHasValidFrameworkDb
         return;
     }
 
-    my @files = File::Find::Rule->file()
-                ->name("wp-config.php")
-                ->extras({ follow => 1 })
-                ->in($documentRoot);
-    if (@files > 0)
-    {
-        $framework = WORDPRESS;
-        $array[$sIndex][FRAMEWORK] = $framework;
-    }
-    else
-    {
-        @files = File::Find::Rule->file()
-            ->name("settings.php")
-            ->extras({ follow => 1 })
-            ->in($documentRoot);
-        if (@files > 0)
-        {
-            $framework = DRUPAL;
-            $array[$sIndex][FRAMEWORK] = $framework;
-        }
-        else
-        {
-            @files = File::Find::Rule->file()
-                ->name("configuration.php")
-                ->extras({ follow => 1 })
-                ->in($documentRoot);
-            if (@files > 0)
-            {
-                $framework = JOOMLA;
-                $array[$sIndex][FRAMEWORK] = $framework;        
-            }
-        }
-    }
+    ($framework,my @files)=&pars_DetectFramework($documentRoot);
+    $array[$sIndex][FRAMEWORK]=$framework;
     
-    if (!$framework)
+    if ($framework eq 'Unknown')
     {
         return;
     }
@@ -4713,14 +5013,18 @@ sub pars_siteHasValidFrameworkDb
     if (!$array[$sIndex][MYSQL])
     {
         my $strYesOrNo =" ";
-        while($strYesOrNo!~/^\s*[YynN]\s*$/)
-        {
-            ilog_printf(1, "\n    $framework site detected, would you like to automatically create and migrate the database [$strSiteName]? (Y/N):");
-            chomp($strYesOrNo = <STDIN>);
-            ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
-                if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+        if(&utf_getRunMode() eq 'i'){
+            while($strYesOrNo!~/^\s*[YynN]\s*$/)
+            {    
+                ilog_printf(1, "\n    $framework site detected, would you like to automatically create and migrate the database [$strSiteName]? (Y/N):");
+                chomp($strYesOrNo = <STDIN>);
+                ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
+                    if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+            }
         }
-        
+	else{
+            $strYesOrNo = ($sIndex == $g_selectedsite)?'y':'n';
+        }        
         $array[$sIndex][MYSQL] = ($strYesOrNo=~/^\s*[Yy]\s*$/);
     }
     else
@@ -4729,68 +5033,25 @@ sub pars_siteHasValidFrameworkDb
     }
     
     # TODO: more accurate way to make sure that this is the root config
-    my $configFile = $files[0];
-    $array[$sIndex][CONFIGFILE] = $configFile;
-    if (!$array[$sIndex][MYSQL])
+#    my $configFile = $files[0];
+  $array[$sIndex][CONFIGFILE]=\@files;
+   my $configFile;
+   if (!$array[$sIndex][MYSQL])
     {
         return;
-    }    
-    
-    my $dbName;
-    my $dbUser;
-    my $dbPassword;
-    my $dbHost;    
-    if ($framework eq WORDPRESS)
-    {
-        `php read_wp_settings.php "$configFile" "$workingFolder/${framework}-settings.txt";`;
     }
-    elsif ($framework eq DRUPAL)
-    {
-        `php read_drupal_settings.php "$configFile" "$workingFolder/${framework}-settings.txt";`;        
-    }
-    elsif ($framework eq JOOMLA)
-    {
-        `php read_joomla_settings.php "$configFile" "$workingFolder/${framework}-settings.txt";`;
-    }
-    else
+   
+  foreach $configFile (@files)
+  {
+   
+    if(!&pars_generateFrameworkSetting($framework,$configFile))
     {
         # we have a bug...
         ilog_print(1,"\nERROR: Unrecognized framework: $framework\n");
         return 0;
     }
-
-    open my $configFile, '<', "$workingFolder/${framework}-settings.txt" or die "Can't read ${framework}-settings.txt: $!";
-    while (my $line = <$configFile>)
-    {
-        my @tempSplit = split('=', $line);
-        my $tempValue = @tempSplit[1];
-        chomp($tempValue);
-        if ($line =~ /DB_NAME/)
-        {
-            $array[$sIndex][DB_NAME] = $tempValue;
-        }
-        if ($line =~ /DB_USER/)
-        {
-            $array[$sIndex][DB_USER] = $tempValue;
-        }
-        if ($line =~ /DB_PASSWORD/)
-        {
-            $array[$sIndex][DB_PASS] = $tempValue;
-        }
-        if ($line =~ /DB_HOST/)
-        {
-            $array[$sIndex][DB_HOST] = $tempValue;
-        }
-        if ($line =~ /WP_SITEURL/)
-        {
-            $array[$sIndex][WP_SITEURL] = $tempValue;
-        }
-        if ($line =~ /INCLUDED_FILES/)
-        {
-            # @files = split /;/,$tempValue;
-            $array[$sIndex][INCLUDED_FILES] = $tempValue;
-        }
-    }    
+    &pars_readFrameworkSetting($framework,$configFile,$sIndex);
+  }    
 }
 
 #######################################################################################################################
@@ -4874,6 +5135,7 @@ sub pars_logSiteToRecoveryFile
     # mySQL 
     $strRecoveryInfo  .=  "\nMySQL=".( ($array[$sIndex][MYSQL]) ? "yes" : "no" );
     $strRecoveryInfo  .=  "\nFramework=".$array[$sIndex][FRAMEWORK];
+	my $strSessionName = &ilog_getSessionName();
     ilog_setLogInformation("REC_INFO","",$strRecoveryInfo,"","",$strSessionName);
 }
 
@@ -4908,21 +5170,28 @@ sub pars_AskSelectSites
     }
 
     $array[$sIndex][MYSQL] = 0;
-    my $promptyn;    
-    ilog_print(1,"\n\n");
-    ui_printline();
-    ilog_printf(MSG_SITE_DETAILS,$strSiteName);
-    ui_printline();
-    ilog_printf(MSG_SOURCE_PATH, $documentRoot);
-    $strYesOrNo =" ";
-    while($strYesOrNo!~/^\s*[YynN]\s*$/)
-    {           
-        ilog_printf(MSG_MIGRATE_SITE, $strSiteName);
-        chomp($strYesOrNo = <STDIN>);
-        ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO) 
-            if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+    if(&utf_getRunMode() eq 'i'){
+        my $promptyn;    
+        ilog_print(1,"\n\n");
+        ui_printline();
+        ilog_printf(MSG_SITE_DETAILS,$strSiteName);
+        ui_printline();
+        ilog_printf(MSG_SOURCE_PATH, $documentRoot);
+        $strYesOrNo =" ";
+        while($strYesOrNo!~/^\s*[YynN]\s*$/)
+        {           
+            ilog_printf(MSG_MIGRATE_SITE, $strSiteName);
+            chomp($strYesOrNo = <STDIN>);
+            ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO) 
+                if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+        }
+    }
+    else{
+         $strYesOrNo = ($sIndex == $g_selectedsite)? 'y':'n';
     }
     return 0 if ($strYesOrNo=~/^\s*[Nn]\s*$/);   # exit - site was not selected
+
+    $g_nositeselected=0;
     return 1; # site was selected
 }
 
@@ -5341,7 +5610,7 @@ sub pars_setHtaccess
             my $fileNameHT;
             $fileNameHT = $splitEntry[$#splitEntry];
             chomp($fileNameHT);
-            if($htaccessfilename eq $fileNameHT)
+            if($htaccessfilename && ($htaccessfilename eq $fileNameHT))
             {                
                 #************************************************************
                 # Get the path for this file
@@ -7103,8 +7372,7 @@ sub pars_setHtaccess
                 my $fileNameHT;
                 $fileNameHT = $splitEntry[$#splitEntry];
                 chomp($fileNameHT);
-                
-                if($htaccessfilename eq $fileNameHT)
+                if($htaccessfilename && ($htaccessfilename eq $fileNameHT))
                 {
                     #************************************************************
                     # Get the path for this file
@@ -9235,7 +9503,7 @@ sub pars_createXML
             
             if($array[$i][SITENAME] eq $arrayDir[$j][SITENAME])
             { 
-                @temp = split /\²/,$array[$i][ALIAS];
+                @temp = split /\Â²/,$array[$i][ALIAS];
                 
                 for($k=0;$k<$#temp; $k = $k + 2)
                 {
@@ -9492,7 +9760,7 @@ sub pars_createXML
             my $k = 0;          
             if($array[$i][SITENAME] eq $arrayDir[$j][SITENAME])
             {
-                @temp = split /\²/,$array[$i][SCRIPTALIAS];                
+                @temp = split /\Â²/,$array[$i][SCRIPTALIAS];                
                 for($k=0;$k<$#temp; $k = $k + 2)
                 {
                     my $directoryName;
