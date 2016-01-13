@@ -255,18 +255,36 @@ sub utf_setCurrentWorkingFolder
 #-------------------------------------------------------------------------
 sub utf_getCurrentWorkingFolder
 {
-	#local variables declaration
+    #local variables declaration
     my $OSType;
+    $OSType = $^O; # get the current operating system type
+    if($OSType eq 'WINDOWS')
+    {
+        $glob_workingFolder =~ tr/\//\\/; #change the current directory to windows style
+    }
 
-	$OSType = $^O; # get the current operating system type
-
-	if($OSType eq 'WINDOWS')
-	{
-		$glob_workingFolder =~ tr/\//\\/;	 #change the current directory to windows style
-	}
-
-	return $glob_workingFolder;
+    return $glob_workingFolder;
 }
+
+#-------------------------------------------------------------------------
+#Method Name        :        utf_getWorkingFolder
+#Description        :        gets the full path of the working folder						 
+#Input              :        NA
+#Output             :        NA
+#Return             :        returns the current working folder
+#-------------------------------------------------------------------------
+sub utf_getWorkingFolder
+{
+    # get the current working folder
+    my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+    #get session name
+    my $strSessionName = &ilog_getSessionName();
+    #form the complete working folder
+    my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+    
+    return $workingFolder;
+}
+
 
 #-------------------------------------------------------------------------
 #Method Name        :        utf_setCurrentModuleName

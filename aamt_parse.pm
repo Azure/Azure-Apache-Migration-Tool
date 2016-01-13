@@ -32,6 +32,7 @@ my $strUserDir;         # Location of ~user site files...
 my %SkippedDirectives = ("IfDefine","1","Location","1","LocationMatch","1","Limit","1","LimitExcept","1");
 my $strSessionName;
 my $DEBUG_MODE = 0;
+
 #-------------------------------------------------------------------------
 # Method Name       :        pars_FirstPass
 #
@@ -716,13 +717,11 @@ sub pars_SetSessionFolder
     $OSType = $^O; # get the current operating system type
 	if($OSType eq WINDOWS)
 	{
-		$strSessionFolder = utf_getCurrentWorkingFolder()."\\"
-            .$strSessionName."\\";
+            $strSessionFolder = utf_getCurrentWorkingFolder()."\\".$strSessionName."\\";
 	}
     else
     {
-        $strSessionFolder = utf_getCurrentWorkingFolder()."/"
-            .$strSessionName."/";
+        $strSessionFolder = utf_getCurrentWorkingFolder()."/".$strSessionName."/";
     }
 
     return $strSessionFolder;
