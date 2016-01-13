@@ -66,13 +66,6 @@ my @errorDocument;
 my $errorDocumentCount = 0;
 my $virtUserdir = 0;
 
-# get the current working folder
-my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-#get session name
-my $strSessionName = &ilog_getSessionName();
-#form the complete working folder
-my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
-
 #----------------------------------------------------------------------------------------------------------------------
 $siteIndex[0]  = 'SITENAME';
 $siteIndex[1]  = 'DIRECTORY';
@@ -325,6 +318,7 @@ sub pars_CreateReadinessReport
 
         ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
         
+	my $workingFolder = &utf_getWorkingFolder();	
         # write the readiness report to a file
         my $outFile = "$workingFolder/readinessreport.json";
         open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
@@ -576,6 +570,7 @@ sub pars_PublishSite
             }
 
             # START MUNGING
+	    my $workingFolder = &utf_getWorkingFolder();
             rmtree(["$workingFolder/wwwroot"]);
             mkdir "$workingFolder/wwwroot";
             my @filesToCopy;
@@ -668,6 +663,7 @@ sub pars_PublishSite
 
             # RESTORE SQL
             ilog_print(1,"\nMoving database...\n");
+	    if ($DEBUG_MODE) { ilog_print(1,"DEBUG: mysql -u $rUsername -h $rServer -p'$rPassword' $rDatabase < $workingFolder/mysqldump.sql;\n"); }
             `mysql -u $rUsername -h $rServer -p'$rPassword' $rDatabase < $workingFolder/mysqldump.sql`;
             $returnCode = $?;
             if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: returncode: $returnCode\n"); }
@@ -742,6 +738,7 @@ sub getConfigFiles
                 $newName =~ s/$documentRoot2//g;
                 $newName =~ s/^\///g;
                 my $abPath = abs_path($phpFile);
+		my $workingFolder = &utf_getWorkingFolder();
                 my $dest = "$workingFolder/wwwroot/${newName}_copy";
                 my $destdirname  = dirname($dest);
                 if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Copying phpFile: From: $abPath | To: $dest\n"); }
@@ -836,9 +833,7 @@ sub deployToSite
         $zip->addFile($itemToAdd, $filename);
     }
 
-    # my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-    # my $strSessionName = &ilog_getSessionName();
-    # my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+    my $workingFolder = &utf_getWorkingFolder();    
     my $zipLocation = "$workingFolder/site-content.zip";
     if ( $zip->writeToFileNamed($zipLocation) != AZ_OK ) 
     {
@@ -4735,7 +4730,7 @@ sub pars_siteHasValidFrameworkDb
     {
         return;
     }    
-    
+    my $workingFolder = &utf_getWorkingFolder();    
     my $dbName;
     my $dbUser;
     my $dbPassword;
@@ -4874,6 +4869,7 @@ sub pars_logSiteToRecoveryFile
     # mySQL 
     $strRecoveryInfo  .=  "\nMySQL=".( ($array[$sIndex][MYSQL]) ? "yes" : "no" );
     $strRecoveryInfo  .=  "\nFramework=".$array[$sIndex][FRAMEWORK];
+    my $strSessionName = &ilog_getSessionName();
     ilog_setLogInformation("REC_INFO","",$strRecoveryInfo,"","",$strSessionName);
 }
 
