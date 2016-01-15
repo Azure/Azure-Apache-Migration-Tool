@@ -423,7 +423,7 @@ sub pars_CreateReadinessReport
     $osVersion =~ s/\n//g;
     $osVersion = 'LX: ' . $osVersion;
     $osVersion = substr($osVersion, 0, 50);
-    if(&utf_getRunMode() eq 'd'){
+    if(&utf_getRunMode() eq 'deploy'){
     	$g_selectedsite=$_[0];
     }
     $array[0][PUBLISH] = &pars_AskSelectSites(0);
@@ -519,7 +519,7 @@ sub pars_CreateReadinessReport
         $sIndex++;
     }
 
-    if(&utf_getRunMode() eq 'd'){
+    if(&utf_getRunMode() eq 'deploy'){
 	if( &pars_IsNoSiteSelected()) { return;}
     }
 
@@ -550,7 +550,7 @@ sub pars_CreateReadinessReport
 
         my $publishSuccess = FALSE;
 
-	if(&utf_getRunMode() eq 'i'){
+	if(&utf_getRunMode() eq 'interactive'){
             while (!$publishSuccess)
             {
                 my $res = $ua->request($req);
@@ -590,7 +590,7 @@ sub pars_CreateReadinessReport
 	       }
 	}
 
-        if(&utf_getRunMode() eq 'i'){
+        if(&utf_getRunMode() eq 'interactive'){
             ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
         }
        
@@ -628,7 +628,7 @@ sub pars_UploadPublishSettingsAllSites
     my $strPublishSettings =" ";
     my $fileFound = FALSE;
     
-    if(&utf_getRunMode() eq 'i'){
+    if(&utf_getRunMode() eq 'interactive'){
        ilog_print(1,"\n\n");
        ui_printline();
        ilog_printf(1,"Please enter the location of the publish settings: \n");
@@ -744,9 +744,20 @@ sub pars_PublishSite
         my $data = $xml->XMLin($strPublishSettings, ForceArray => ['publishProfile']);
         for my $entry (@{$data->{publishProfile}})
         {
-	    my $key = $entry->{publishMethod};
+	    my $findit=0;
 
-	    if ($key eq "MSDeploy")
+	    if(&utf_getRunMode eq 'deploy')
+	    {
+	        my $key = $entry->{publishMethod};
+	        $findit=1 if($key eq "MSDeploy");
+	    }
+	    else
+	    {
+                my $key = $entry->{originalsitename};
+                $findit=1 if ($key eq $rComputername.":".$strSiteName);
+	    }
+
+	    if($findit)
             {
                 $publishUrl = $entry->{publishUrl};
                 $userName = $entry->{userName};
@@ -767,7 +778,7 @@ sub pars_PublishSite
         {
             ilog_print(1,"\n\nPublishing failed with response code: $rCode\n");            
             $strYesOrNo =" ";
-	    if(&utf_getRunMode() eq 'i'){
+	    if(&utf_getRunMode() eq 'interactive'){
                 while($strYesOrNo!~/^\s*[YynN]\s*$/)
                 {
                     ilog_printf(1, "    Would you like to retry publishing the site [$strSiteName]? (Y/N):");
@@ -982,7 +993,7 @@ sub pars_PublishSite
                 $strYesOrNo =" ";
 	        ilog_print(1, "mysql -u $rUsername -h $rServer -p'rPassword' $rDatabase < workingFolder/mysqldump.sql\n");	
 		ilog_print(1,"\nplease check and try moving databsae manually...\n");
-		if(&utf_getRunMode() eq 'i'){
+		if(&utf_getRunMode() eq 'interactive'){
                    while($strYesOrNo!~/^\s*[YynN]\s*$/)
                    {
                        ilog_printf(1, "    Would you like to retry publishing the database for site [$strSiteName]? (Y/N):");
@@ -1182,7 +1193,7 @@ sub deployToSite
         {
             $nBar = $barWidth;
         }
-	if(&utf_getRunMode() eq 'i'){        
+	if(&utf_getRunMode() eq 'interactive'){        
             ilog_print(1,"[" . "=" x $nBar . " " x ($barWidth - $nBar) . "]\r");
 	}
         $nChunk++;
@@ -1260,7 +1271,7 @@ sub pars_GetFileFromSource
 sub pars_Generate2D
 {   
     utf_setCurrentModuleName('PARSER');
-    if(&utf_getRunMode() eq 'i'){
+    if(&utf_getRunMode() eq 'interactive'){
         ilog_print(1,"\n\nParsing Apache conf file(s)... ");
     }
     ($configFile,$ResourceFile, $RecoveryMode) = @_;
@@ -1526,10 +1537,10 @@ sub pars_Generate2D
     # if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: GEN2D last index of array is: $#array"); }
     # this has the side effect of calling pars_siteHasValidFrameworkDb
     # which populates the global variable $array MYSQL, FRAMEWORK, and CONFIGFILE entries
-    if(&utf_getRunMode() eq 'i'){
+    if(&utf_getRunMode() eq 'interactive'){
         &pars_CreateReadinessReport();
     }
-    elsif(&utf_getRunMode() eq 'd')
+    elsif(&utf_getRunMode() eq 'deploy')
     {
     	&pars_CreateReadinessReport($_[3]);
     }
@@ -5013,7 +5024,7 @@ sub pars_siteHasValidFrameworkDb
     if (!$array[$sIndex][MYSQL])
     {
         my $strYesOrNo =" ";
-        if(&utf_getRunMode() eq 'i'){
+        if(&utf_getRunMode() eq 'interactive'){
             while($strYesOrNo!~/^\s*[YynN]\s*$/)
             {    
                 ilog_printf(1, "\n    $framework site detected, would you like to automatically create and migrate the database [$strSiteName]? (Y/N):");
@@ -5170,7 +5181,7 @@ sub pars_AskSelectSites
     }
 
     $array[$sIndex][MYSQL] = 0;
-    if(&utf_getRunMode() eq 'i'){
+    if(&utf_getRunMode() eq 'interactive'){
         my $promptyn;    
         ilog_print(1,"\n\n");
         ui_printline();

@@ -73,7 +73,7 @@ sub pars_FirstPass
     
     utf_setCurrentModuleName(MOD_PARS1);    # Set module Name for status logging...
     
-    ui_printBanner() if(&utf_getRunMode() eq 'i');
+    ui_printBanner() if(&utf_getRunMode() eq 'interactive');
     
     #**************************************************************	
     # Parse every file avilable in the parse file list.

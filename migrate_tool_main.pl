@@ -60,21 +60,21 @@ eval
 {
     &usage() if (
         !GetOptions(
-        'help|?'=>\&modeh,
-        'interactive'=>\&modei,
-        'list=s{1,2}'=>\&model,
-        'deploy=s{3,4}'=>\&moded));
-    if($mode eq 'i'){
-        &runmodei();
+        'help|?'=>\&modeHelp,
+        'interactive'=>\&modeInteractive,
+        'list=s{1,2}'=>\&modeList,
+        'deploy=s{3,4}'=>\&modeDeploy));
+    if($mode eq 'interactive'){
+        &runInteractive();
     }
-    elsif($mode eq 'l'){
-        &runmodel();
+    elsif($mode eq 'list'){
+        &runList();
     }
-    elsif($mode eq 'd'){
-        &runmoded();
+    elsif($mode eq 'deploy'){
+        &runDeploy();
     }
     else{
-        &runmodeh();
+        &runHelp();
     }
     
  
@@ -103,24 +103,24 @@ sub usage
     exit 0;
 }
 
-sub modeh
+sub modeHelp
 {
-    if($mode && $mode ne 'h'){&usage();};
-    $mode='h';
+    if($mode && $mode ne 'help'){&usage();};
+    $mode='help';
     &utf_setRunMode($mode);
 }
 
-sub modei
+sub modeInteractive
 {
-   if($mode && $mode ne 'i') {&usage();};
-   $mode='i';
+   if($mode && $mode ne 'interactive') {&usage();};
+   $mode='interactive';
    &utf_setRunMode($mode);
 }
 
-sub model
+sub modeList
 {
-    if($mode && $mode  ne 'l') {&usage();}
-    $mode='l';
+    if($mode && $mode  ne 'list') {&usage();}
+    $mode='list';
     my($name,$val)=@_;
     push @params,$val;
     &usage() if($#params>0);
@@ -128,10 +128,10 @@ sub model
     &utf_setRunMode($mode);
 }
 
-sub moded
+sub modeDeploy
 {
-    if($mode && $mode ne 'd') {&usage();}
-    $mode='d';
+    if($mode && $mode ne 'deploy') {&usage();}
+    $mode='deploy';
     my($name,$val)=@_;
     push @params,$val;
     &usage() if($#params>2);
@@ -146,7 +146,7 @@ sub moded
 }
 
 
-sub runmodei
+sub runInteractive
 {
    my $auqRetVal;
     ($auqRetVal,$localConfFilePath) = auth_main();        # AUQ module functionality    
@@ -246,7 +246,7 @@ sub runmodei
     &TerminateTool();
 }
 
-sub runmodel
+sub runList
 {
     my $auqRetVal;
     ($auqRetVal,$localConfFilePath) = auth_main('model_dummy_session',$configfile);        # AUQ module functionality
@@ -332,7 +332,7 @@ sub runmodel
     &TerminateTool();
 }
 
-sub runmoded
+sub runDeploy
 {
     my $auqRetVal;
     ($auqRetVal,$localConfFilePath) = auth_main('modeld_dummy_session',$configfile);        # AUQ module functionality
@@ -418,7 +418,7 @@ sub runmoded
     &TerminateTool();
 }
 
-sub runmodeh()
+sub runHelp()
 {
     &usage();
 }

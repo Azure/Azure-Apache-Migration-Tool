@@ -38,14 +38,14 @@ my  $REC_MY_NAME_VIRTUAL_HOST ='[NAME_VIRTUAL_HOST]' ;
 sub auth_main                                               
 {
     ui_clearScreen();         #used to clear screen defined in aamt_userinterface.pm file
-    ui_Title() if(&utf_getRunMode() eq 'i');             #used for title of the migartion kit defined in aamt_userinterface.pm file
+    ui_Title() if(&utf_getRunMode() eq 'interactive');             #used for title of the migartion kit defined in aamt_userinterface.pm file
 
     if (!&auth_isUserRoot())
     {
         return (0, 0);
     }
 
-    if(&utf_getRunMode() eq 'i'){
+    if(&utf_getRunMode() eq 'interactive'){
         ui_printBanner();
         &ilog_print(1,TITLE_SESSION_NAME);                      #To display title pertaining to session name
        ($tempretval,$sessionName)=auth_inputSessionName();     #user input "session name" for migration
@@ -102,7 +102,7 @@ sub auth_main
 			$auqRetVal=0; 
 			return ($auqRetVal,0); #return FALSE
 		}
-        if(&utf_getRunMode() eq 'i'){
+        if(&utf_getRunMode() eq 'interactive'){
     	    ui_printBanner("Source Configuration Details\n");
             &ilog_print(1,TITLE_SOURCE_IP);                    #Source IP keyword    
         }
@@ -127,7 +127,7 @@ sub auth_main
             return ($auqRetVal,0); #return FALSE
         }
 
-        if(&utf_getRunMode() eq 'i'){
+        if(&utf_getRunMode() eq 'interactive'){
             ($tempretval,$filePath)=auth_inputFilePath();      # Http configuration file path of the source machine
         }
         else{
@@ -274,7 +274,7 @@ sub auth_inputParam
     #supposed to be visible or hidden
 	# if($Visibleflag eq "VISIBLE")
     # {
-                if(&utf_getRunMode() eq 'i'){
+                if(&utf_getRunMode() eq 'interactive'){
  		    ilog_print(1,$PromptMsg);
                     chomp($Value = <STDIN>);                                                            #input the value
                 }
@@ -594,7 +594,7 @@ sub auth_inputSessionName
 	my $specialCharPattern = "[a-zA-Z0-9-_]"; # Allowed in directory creation
     while ($count < MAXTRIES )
     {
-        if(&utf_getRunMode() eq 'i'){
+        if(&utf_getRunMode() eq 'interactive'){
             ilog_print(1,CON_SESSION_NAME);
             chop($sessionName=<STDIN>);
         }
@@ -649,7 +649,7 @@ sub auth_inputFilePath
 	$tempretval=0;
 	while ($count < MAXTRIES )
     {
-        if(&utf_getRunMode() eq 'i'){
+        if(&utf_getRunMode() eq 'interactive'){
             ($tempretval,$filePath) = auth_inputParam(CON_HTTPD_PATH,DEFAULT_HTTPD_PATH,'VISIBLE','F','0');
         }
         else{
@@ -710,7 +710,7 @@ sub auth_resumeMigrate()
 	my $exitVal;
 	while ($count < MAXTRIES )
     {
-        if(&utf_getRunMode() eq 'i'){
+        if(&utf_getRunMode() eq 'interactive'){
             ilog_print(1,$messageString);
             chop($resumemigrate=<STDIN>);    # user input
         }
