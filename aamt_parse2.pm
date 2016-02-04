@@ -14,7 +14,7 @@ use File::Find;
 use File::Basename;
 use Cwd 'abs_path';
 use File::Path;
-my $DEBUG_MODE = 0;
+my $DEBUG_MODE = 1;
 
 #----------------------------------------------------------------------------------------------------------------------
 #                                          Global variables used by this module
@@ -65,6 +65,13 @@ my $mimeFlag = 1;
 my @errorDocument;
 my $errorDocumentCount = 0;
 my $virtUserdir = 0;
+
+# get the current working folder
+my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+#get session name
+my $strSessionName = &ilog_getSessionName();
+#form the complete working folder
+my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
 
 #----------------------------------------------------------------------------------------------------------------------
 $siteIndex[0]  = 'SITENAME';
@@ -318,7 +325,6 @@ sub pars_CreateReadinessReport
 
         ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
         
-	my $workingFolder = &utf_getWorkingFolder();	
         # write the readiness report to a file
         my $outFile = "$workingFolder/readinessreport.json";
         open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
@@ -570,7 +576,6 @@ sub pars_PublishSite
             }
 
             # START MUNGING
-	    my $workingFolder = &utf_getWorkingFolder();
             rmtree(["$workingFolder/wwwroot"]);
             mkdir "$workingFolder/wwwroot";
             my @filesToCopy;
@@ -663,7 +668,6 @@ sub pars_PublishSite
 
             # RESTORE SQL
             ilog_print(1,"\nMoving database...\n");
-	    if ($DEBUG_MODE) { ilog_print(1,"DEBUG: mysql -u $rUsername -h $rServer -p'$rPassword' $rDatabase < $workingFolder/mysqldump.sql;\n"); }
             `mysql -u $rUsername -h $rServer -p'$rPassword' $rDatabase < $workingFolder/mysqldump.sql`;
             $returnCode = $?;
             if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: returncode: $returnCode\n"); }
@@ -738,7 +742,6 @@ sub getConfigFiles
                 $newName =~ s/$documentRoot2//g;
                 $newName =~ s/^\///g;
                 my $abPath = abs_path($phpFile);
-		my $workingFolder = &utf_getWorkingFolder();
                 my $dest = "$workingFolder/wwwroot/${newName}_copy";
                 my $destdirname  = dirname($dest);
                 if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: Copying phpFile: From: $abPath | To: $dest\n"); }
@@ -833,7 +836,9 @@ sub deployToSite
         $zip->addFile($itemToAdd, $filename);
     }
 
-    my $workingFolder = &utf_getWorkingFolder();    
+    # my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+    # my $strSessionName = &ilog_getSessionName();
+    # my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
     my $zipLocation = "$workingFolder/site-content.zip";
     if ( $zip->writeToFileNamed($zipLocation) != AZ_OK ) 
     {
@@ -934,11 +939,11 @@ sub pars_GetFileFromSource
 #
 #######################################################################################################################
 sub pars_Generate2D
-{   
+{       
     utf_setCurrentModuleName('PARSER');
     ilog_print(1,"\n\nParsing Apache conf file(s)... ");
     ($configFile,$ResourceFile, $RecoveryMode) = @_;
-
+if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: pars_Generate2D from configFile: $configFile\n"); }
     eval
     {
         open CONFIGHANDLE ,$configFile or die 'ERR_FILE_OPEN';
@@ -998,6 +1003,7 @@ sub pars_Generate2D
     $array[0][DESTINATIONPATH] =~ s/\\$//;
     while (&pars_getNextDirective() == 1)
     {
+        if ($DEBUG_MODE) { ilog_print(1,"DEBUG: directiveName: $directiveName\n"); }
         if($directiveName eq "VirtualHost")
         {
             my @splitPorts = split(':', $directiveValue);
@@ -1021,7 +1027,7 @@ sub pars_Generate2D
                     # log error and exit tool                   
                     ilog_setLogInformation('INT_ERROR',$configFile,ERR_FILE_OPEN,__LINE__);     
                     return FALSE;                                                           
-                }   
+                }
             }
             else
             {
@@ -1090,8 +1096,7 @@ sub pars_Generate2D
                 ilog_setLogInformation('INT_INFO',$configFile,MSG_FILE_CLOSE,'');
             }
 
-            $siteName = $serverName;
-            
+            $siteName = $serverName;            
             if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: processing selected site: $serverName\n"); }
             &pars_setVirtualhost();
         }
@@ -1206,8 +1211,12 @@ sub pars_Generate2D
 
 sub pars_common2d
 {
+    if ($DEBUG_MODE) { ilog_print(1,"\n-----------------------------------------------------"); }
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: pars_common2d starting"); }
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: pars_common2d directiveName: $directiveName \n"); }
+    if ($DEBUG_MODE) { ilog_print(1,"DEBUG: pars_common2d directiveValue: $directiveValue \n"); }   
     # To ignore the IfDefine directive.
-    if($directiveName eq "IfDefine")
+    if ($directiveName eq "IfDefine")
     {
         while (&pars_getNextDirective() == 1)
         {
@@ -1264,198 +1273,9 @@ sub pars_common2d
                 last;
             }
         }
-    }
-    
-    if($directiveName eq "AccessConfig")
-    {
-        #Equivalent IIS tag => Not Applicable
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        if($directiveValue =~ /^\//)
-        {
-            $array[$rowCount][ACCESSCONFIG] = $directiveValue;
-            $accessFlag = 0;
-        }
-        else
-        {
-            if($array[$rowCount][SERVERROOT] =~ /\/$/)
-            {
-                $array[$rowCount][ACCESSCONFIG] = $array[$rowCount][SERVERROOT] . $directiveValue;
-                $accessFlag = 0;
-            }
-            else
-            {
-                
-                $array[$rowCount][ACCESSCONFIG] = $array[$rowCount][SERVERROOT] . "/" .$directiveValue;
-                $accessFlag = 0;
-            }
-        }
-        if($array[$rowCount][ACCESSCONFIG] eq "/dev/null")
-        {                
-            #Ignore this directive.
-        }
-        else
-        {
-            my $includeFilename = $array[$rowCount][ACCESSCONFIG];
-            $includeFilename =~ s/\//_/g;
-            $filepos = tell CONFIGHANDLE;
-            push(@includeFilePointer,$filepos);
-            push(@includeFileName,$configFile);
-            $flag = 1;
-            my $temp = &pars_GetSessionFolder() . $includeFilename;
-            eval
-            {
-                close CONFIGHANDLE or die 'ERR_FILE_CLOSE';
-                
-            };
-            if($@)
-            {
-                if($@=~/ERR_FILE_CLOSE/)
-                {
-                    # log 'file close error' and continue                       
-                    ilog_setLogInformation('INT_ERROR',$configFile,ERR_FILE_CLOSE,__LINE__);                        
-                }                    
-            }
-            else
-            {
-                ilog_setLogInformation('INT_INFO',$configFile,MSG_FILE_CLOSE,'');
-            }
-            eval
-            {
-                open CONFIGHANDLE ,$temp or die 'ERR_FILE_OPEN';                    
-            };
-            if($@)  
-            {
-                if($@=~/ERR_FILE_OPEN/)
-                {   
-                    # log error and exit tool                       
-                    ilog_setLogInformation('INT_ERROR',$temp,ERR_FILE_OPEN,__LINE__);       
-                    return FALSE;                        
-                }
-            }
-            else
-            {
-                ilog_setLogInformation('INT_INFO',$temp,MSG_FILE_OPEN,'');
-            }
-        }
-    }
-    
-    if($directiveName eq "ResourceConfig")
-    {
-        #Equivalent IIS tag => Not Applicable
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        if($directiveValue =~ /^\//)
-        {
-            $array[$rowCount][RESOURCECONFIG] = $directiveValue;
-            $resourceFlag = 0;
-        }
-        else
-        {
-            if($array[$rowCount][SERVERROOT] =~ /\/$/)
-            {
-                $array[$rowCount][RESOURCECONFIG] = $array[$rowCount][SERVERROOT] . $directiveValue;
-                $resourceFlag = 0;
-            }
-            else
-            {                   
-                $array[$rowCount][RESOURCECONFIG] = $array[$rowCount][SERVERROOT] . "/" .$directiveValue;
-                $resourceFlag = 0;
-            }
-        }
-        if($array[$rowCount][RESOURCECONFIG] eq "/dev/null")
-        {                
-            #Ignore this directive.
-        }
-        else
-        {
-            my $includeFilename = $array[$rowCount][RESOURCECONFIG];
-            $includeFilename =~ s/\//_/g;
-            $filepos = tell CONFIGHANDLE;
-            push(@includeFilePointer,$filepos);
-            push(@includeFileName,$configFile);
-            $flag = 1;
-            my $temp = &pars_GetSessionFolder() . $includeFilename;
-            eval
-            {
-                close CONFIGHANDLE or die 'ERR_FILE_CLOSE';                 
-            };
-            if($@)
-            {
-                if($@=~/ERR_FILE_CLOSE/)
-                {
-                    # log 'file close error' and continue                       
-                    ilog_setLogInformation('INT_ERROR',$configFile,ERR_FILE_CLOSE,__LINE__);                        
-                }                    
-            }
-            else
-            {
-                ilog_setLogInformation('INT_INFO',$configFile,MSG_FILE_CLOSE,'');
-            }
-            eval
-            {
-                open CONFIGHANDLE ,$temp or die 'ERR_FILE_OPEN';
-                
-            };
-            if($@)  
-            {
-                if($@=~/ERR_FILE_OPEN/)
-                {   
-                    # log error and exit tool                       
-                    ilog_setLogInformation('INT_ERROR',$temp,ERR_FILE_OPEN,__LINE__);       
-                    return FALSE;                        
-                }
-            }
-            else
-            {
-                ilog_setLogInformation('INT_INFO',$temp,MSG_FILE_OPEN,'');
-            }
-        }
-    }
-    
-    if($directiveName eq "ScriptAlias")
-    {
-        #Equivalent IIS tag => Not applicable
-        my @tempt;
-        my $temp;
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        if($directiveValue !~ /\"/)
-        {                
-            @tempt = split / /,$directiveValue;
-            $tempt[0] =~ s/^\s+//;
-            $tempt[0] =~ s/\s+$//;
-            $tempt[1] =~ s/^\s+//;
-            $tempt[1] =~ s/\s+$//;
-            $array[$rowCount][SCRIPTALIAS] = $array[$rowCount][SCRIPTALIAS] . $tempt[0] . TASKLIST_DELIM . $tempt[1] . TASKLIST_DELIM;                
-        }
-        else
-        {                
-            @tempt = split /\"/,$directiveValue;    
-            $tempt[0] =~ s/^\s+//;
-            $tempt[0] =~ s/\s+$//;
-            $tempt[1] =~ s/^\s+//;
-            $tempt[1] =~ s/\s+$//;
-            $array[$rowCount][SCRIPTALIAS] = $array[$rowCount][SCRIPTALIAS] . $tempt[0] . TASKLIST_DELIM . $tempt[1] . TASKLIST_DELIM;                
-        }
-        $temp = $tempt[0];
-        $temp =~ s/^\///;
-        $temp =~ s/\/$//;
-        if(pars_ValidateAliasName($temp))
-        {
-            ++$scriptaliasDirInd;
-            $scriptaliasDir[$scriptaliasDirInd][0] = $array[$rowCount][SITENAME]; 
-            $scriptaliasDir[$scriptaliasDirInd][1] = $tempt[1];
-            $scriptaliasDir[$scriptaliasDirInd][1] =~ s/\/$//;
-            $scriptaliasDir[$scriptaliasDirInd][2] = 1;
-            $scriptaliasDir[$scriptaliasDirInd][3] = $tempt[0];
-        }
-        else
-        {   
-            ilog_setLogInformation('INT_ERROR',,ERR_VIRTUAL_LINK,__LINE__);
-        }
-    }
-    if($directiveName eq "ScriptAliasMatch")
+    }    
+
+    if ($directiveName eq "ScriptAliasMatch")
     {
         #Equivalent IIS tag => Not applicable
         $directiveValue =~ s/^\s+//;
@@ -1464,28 +1284,30 @@ sub pars_common2d
         $array[$rowCount][SCRIPTALIASMATCH] = $array[$rowCount][SCRIPTALIASMATCH] . $directiveValue . " ";
     }
     
-    if($directiveName eq "AccessFileName")
+    if ($directiveName eq "AccessFileName")
     {
         #Equivalent IIS tag => Not Applicable
         $directiveValue =~ s/^\s+//;
         $directiveValue =~ s/\s+$//;
         $array[$rowCount][ACCESSFILENAME] = $directiveValue;
     }
-    if($directiveName eq "AddEncoding")
+    if ($directiveName eq "AddEncoding")
     {
         #Equivalent IIS tag => MimeMap
         $directiveValue =~ s/^\s+//;
         $directiveValue =~ s/\s+$//;
         $array[$rowCount][ADDENCODING] = $array[$rowCount][ADDENCODING] . $directiveValue . "|";
     }
-    if($directiveName eq "AddType")
+
+    if ($directiveName eq "AddType")
     {
         #Equivalent IIS tag => MimeMap
         $directiveValue =~ s/^\s+//;
         $directiveValue =~ s/\s+$//;
         $array[$rowCount][ADDTYPE] = $array[$rowCount][ADDTYPE] . $directiveValue . "|";
     }
-    if($directiveName eq "Alias")
+
+    if ($directiveName eq "Alias")
     {
         #Equivalent IIS tag => Not Applicable
         my @tempt;  
@@ -1528,7 +1350,8 @@ sub pars_common2d
             ilog_setLogInformation('INT_ERROR',,ERR_VIRTUAL_LINK,__LINE__);
         }
     }
-    if($directiveName eq "AliasMatch")
+
+    if ($directiveName eq "AliasMatch")
     {
         #Equivalent IIS tag => Not Applicable
         $directiveValue =~ s/^\s+//;
@@ -1537,16 +1360,18 @@ sub pars_common2d
         $array[$rowCount][ALIASMATCH] = $array[$rowCount][ALIASMATCH] . $directiveValue . " ";
         
     }
-    if($directiveName eq "DefaultType")
+
+    if ($directiveName eq "DefaultType")
     {
         #Equivalent IIS tag => MimeMap
         $directiveValue =~ s/^\s+//;
         $directiveValue =~ s/\s+$//;
         
         my $temp = $directiveValue . " " . ".*";
-        $array[$rowCount][ADDTYPE] = $array[$rowCount][ADDTYPE] . $temp . "|";            
+        $array[$rowCount][ADDTYPE] = $array[$rowCount][ADDTYPE] . $temp . "|";
     }
-    if($directiveName eq "DirectoryIndex")
+
+    if ($directiveName eq "DirectoryIndex")
     {
         #Equivalent IIS tag => EnableDirBrowsing;
         $directiveValue =~ s/^\s+//;
@@ -1554,95 +1379,33 @@ sub pars_common2d
         $array[$rowCount][DIRECTORYINDEX] = $directiveValue;
         $array[$rowCount][DIRECTORYINDEX] =~ s/ /,/g;
     }
-    if($directiveName eq "DocumentRoot")
-    {
+    
+    if ($directiveName eq "DocumentRoot")
+    {        
         #Equivalent IIS tag => Path
         $directiveValue =~ s/^\s+//;
         $directiveValue =~ s/\s+$//;
         $array[$rowCount][DOCUMENTROOT] = $directiveValue;
+        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: DOCUMENTROOT found: $directiveValue \n"); }
     }
-    if($directiveName eq "ErrorDocument")
+    
+    if ($directiveName eq "ErrorDocument")
     {
         #Equivalent IIS tag => HttpErrors
         $directiveValue =~ s/^\s+//;
         $directiveValue =~ s/\s+$//;
         $array[$rowCount][ERRORDOCUMENT] = $array[$rowCount][ERRORDOCUMENT] . $directiveValue . " ";
     }
-    if($directiveName eq "ErrorLog")
-    {
-        #Equivalent IIS tag => Not Applicable
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        if($directiveValue =~ /^\|/)
-        {               
-            # The Error Logging for this Site is performed by an external program
-            # So ignore this Directive.                
-        }
-        else
-        {
-            #Equivalent IIS tag => Not applicable
-            if($directiveValue =~ /^\//)
-            {
-                # The Error Log path is an absolute so can be used directly.
-                $array[$rowCount][ERRORLOG] = $directiveValue;
-                $errorFlag = 0;
-            }
-            else
-            {
-                # The Error Log is relative so have to append the Server root to get an absolute path.                    
-                if($array[0][SERVERROOT] =~ /\/$/)
-                {
-                    $array[$rowCount][ERRORLOG] = $array[$rowCount][SERVERROOT] . $directiveValue;
-                    $errorFlag = 0;
-                }
-                else
-                {
-                    $array[$rowCount][ERRORLOG] = $array[$rowCount][SERVERROOT] . "/" .$directiveValue;
-                    $errorFlag = 0;
-                }
-            }
-        }
-    }
-    if($directiveName eq "ExpiresActive")
-    {
-        #Equivalent IIS tag => HttpExpires
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        $array[$rowCount][EXPIRESACTIVE] = $directiveValue;
-    }
-    if($directiveName eq "Header")
-    {
-        #Equivalent IIS tag => HttpCustomHeaders
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        $directiveValue =~ s/"//g;
-        if($directiveValue =~ /^set/)
-        {
-            $array[$rowCount][HEADER] = $array[$rowCount][HEADER] . $directiveValue . "|" ;
-        }            
-    }
-    if($directiveName eq "HostnameLookups")
-    {
-        #Equivalent IIS tag => EnableReverseDNS
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        $array[$rowCount][HOSTNAMELOOKUPS] = $directiveValue;
-    }
-    if($directiveName eq "IdentityCheck")
-    {
-        #Equivalent IIS tag => LogExtFileUserName
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        $array[$rowCount][IDENTITYCHECK] = $directiveValue;
-    }
-    if($directiveName eq "SSLEngine")
+
+    if ($directiveName eq "SSLEngine")
     {
         #Equivalent IIS tag => Not Applicable
         $directiveValue =~ s/^\s+//;
         $directiveValue =~ s/\s+$//;
         $array[$rowCount][SSLENGINE] = $directiveValue;
     }
-    if($directiveName eq "SSLCertificateFile")
+    
+    if ($directiveName eq "SSLCertificateFile")
     {
         #Equivalent IIS tag => Not Applicable
         $directiveValue =~ s/^\s+//;
@@ -1657,7 +1420,8 @@ sub pars_common2d
             $array[$rowCount][SSLCERTIFICATEFILE] = $array[$rowCount][SERVERROOT] . $directiveValue;
         }
     }
-    if($directiveName eq "SSLCertificateKeyFile")
+    
+    if ($directiveName eq "SSLCertificateKeyFile")
     {
         #Equivalent IIS tag => Not Applicable
         $directiveValue =~ s/^\s+//;
@@ -1671,2397 +1435,8 @@ sub pars_common2d
             $array[$rowCount][SSLCERTIFICATEKEYFILE] = $array[$rowCount][SERVERROOT] . $directiveValue;
         }
     }
-    if($directiveName eq "UserDir")
-    {           
-        #Equivalent IIS tag => Not Applicable
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        if (!$virtUserdir)
-        {
-            my @directiveValuetemp; 
-            if($directiveValue =~ /^enabled/)
-            {                   
-                @directiveValuetemp = split / /,$directiveValue;
-                foreach $temp(@directiveValuetemp)
-                {
-                    if($temp eq "enabled")
-                    {
-                        $array[$rowCount][USERENABLED] = 0;
-                    }
-                    else
-                    {
-                        $array[$rowCount][USERDIRENABLED] = $array[$rowCount][USERDIRENABLED] . " " . $temp;
-                    }
-                }
-            }
-            elsif($directiveValue =~ /^disabled/)
-            {
-                @directiveValuetemp = split / /,$directiveValue;
-                foreach $temp(@directiveValuetemp)
-                {
-                    if($temp eq "disabled")
-                    {
-                        $array[$rowCount][USERDISABLED] = 0;
-                    }
-                    else
-                    {
-                        $array[$rowCount][USERDIRDISABLED] = $array[$rowCount][USERDIRDISABLED] . " " . $temp;
-                    }
-                }
-            }
-            else
-            {
-                $array[$rowCount][USERDIR] = $directiveValue;
-                ++$virtUserdir;
-            }
-        }
-        else
-        {
-            my @directiveValuetemp; 
-            if($directiveValue =~ /^enabled/)
-            {                   
-                @directiveValuetemp = split / /,$directiveValue;
-                foreach $temp(@directiveValuetemp)
-                {
-                    if($temp eq "enabled")
-                    {
-                        $array[$rowCount][USERENABLED] = 0;
-                    }
-                    else
-                    {
-                        $array[$rowCount][USERDIRENABLED] = $array[$rowCount][USERDIRENABLED] . " " . $temp;
-                    }
-                }
-                ++$virtUserdir;
-            }
-            elsif($directiveValue =~ /^disabled/)
-            {
-                @directiveValuetemp = split / /,$directiveValue;
-                
-                foreach $temp(@directiveValuetemp)
-                {
-                    if($temp eq "disabled")
-                    {
-                        $array[$rowCount][USERDISABLED] = 0;
-                    }
-                    else
-                    {
-                        $array[$rowCount][USERDIRDISABLED] = $array[$rowCount][USERDIRDISABLED] . " " . $temp;
-                    }
-                }
-                ++$virtUserdir;
-            }
-            else
-            {
-                $array[$rowCount][USERDIR] = $array[$rowCount][USERDIR] . " " . $directiveValue;    
-                ++$virtUserdir;
-            }
-        }
-    }
-    if($directiveName eq "Directory")
-    {
-        #Equivalent IIS tag => Not Applicable
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        if($directiveValue =~ /^~/)
-        {
-            $dirMatch = 1;
-            my @temp;
-            @temp = split / /,$directiveValue;
-            $directiveName = "DirectoryMatch";
-            $directiveValue = $temp[1];
-            
-            chomp($directiveValue);
-            $directiveValue =~ s/"//g;
-            $directiveValue =~ s/^\s+//;
-            $directiveValue =~ s/\s+$//;
-        }
-        elsif($directiveValue =~ /\*/)
-        {
-            $dirMatch = 1;
-            $directiveName = "DirectoryMatch";
-            chomp($directiveValue);
-            $directiveValue =~ s/"//g;
-            $directiveValue =~ s/^\s+//;
-            $directiveValue =~ s/\s+$//;
-        }
-        else
-        {
-            if($directiveValue ne "/")
-            {
-                if($directiveValue =~ /^\//)
-                {
-                    ++$rowDirCount;
-                    $arrayDir[$rowDirCount][SERVERROOT] = "/usr/local/apache/";
-                    $arrayDir[$rowDirCount][SITENAME] = $array[$rowCount][SITENAME];
-                    $arrayDir[$rowDirCount][DIRECTORY] = $directiveValue;
-                    $arrayDir[$rowDirCount][HOSTNAMELOOKUPS] = "Off";
-                    $arrayDir[$rowDirCount][IDENTITYCHECK] = "Off";
-                    $arrayDir[$rowDirCount][ALLOWOVERRIDE] = "All";
-                    $arrayDir[$rowDirCount][ACCESSFILENAME] = $array[$rowCount][ACCESSFILENAME];
-                    $arrayDir[$rowDirCount][DESTINATIONPATH] = $array[$rowCount][DESTINATIONPATH];
-                    $arrayDir[$rowDirCount][DESTINATIONPATH] =~ s/\\/\//g;
-                    $arrayDir[$rowDirCount][DOCUMENTROOT] = $array[$rowCount][DOCUMENTROOT];                
-                    if (index($arrayDir[$rowDirCount][DIRECTORY],$array[$rowCount][DOCUMENTROOT]) != 0) 
-                    {
-                        $arrayDir[$rowDirCount][TASKLIST]  = 1;
-                        $arrayDir[$rowDirCount][DESTINATIONPATH] = $arrayDir[$rowDirCount][DESTINATIONPATH] . $arrayDir[$rowDirCount][DIRECTORY];                            
-                    }
-                    else
-                    {                            
-                        my $temp;
-                        $temp = pars_getRelativePath($arrayDir[$rowDirCount][DIRECTORY],$array[$rowCount][DOCUMENTROOT]);
-                        $arrayDir[$rowDirCount][DESTINATIONPATH] = $arrayDir[$rowDirCount][DESTINATIONPATH] . $temp; 
-                    }
-                    if($arrayDir[$rowDirCount][DESTINATIONPATH] =~ /\/$/)
-                    {
-                        $arrayDir[$rowDirCount][DESTINATIONPATH] =~ s/\/$//;
-                    }                        
-                    
-                    while (&pars_getNextDirective() == 1)
-                    {
-                        if($directiveName eq "/Directory")
-                        {
-                            last;
-                        }
     
-                        # list of directives that are migrated by the tool but can't appear in the DIRECTORY context                            
-                        # KeepAlive
-                        # KeepAliveTimeout
-                        # Listen
-                        # ListenBacklog
-                        # MaxClients
-                        # NameVirtualHost
-                        # Port
-                        # ResourceConfig 
-                        # ScriptAlias 
-                        # ScriptAliasMatch
-                        # ServerAlias 
-                        # ServerName
-                        # ServerRoot 
-                        # TimeOut
-                        # UserDir
-                        # VirtualHost
-                        # AcccessConfig
-                        # AccessFileName
-                        # Alias 
-                        # AliasMatch
-                        # BindAddess
-                        # DirectoryMatch
-                        # DocumentRoot
-                        # ErrorLog
-                        # Files
-                        # FileMatch
-                        # Header
-                        if($directiveName eq "Options")
-                        {
-                            #Equivalent IIS tag => AccessExecute
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][OPTIONS] = $arrayDir[$rowDirCount][OPTIONS] . $directiveValue . " ";
-                        }
-                        if($directiveName eq "Order")
-                        {
-                            #Equivalent IIS tag => Not applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][ORDER] = $directiveValue;
-                        }
-                        if($directiveName eq "AddEncoding")
-                        {
-                            #Equivalent IIS tag => MimeMap
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][ADDENCODING] = $arrayDir[$rowDirCount][ADDENCODING] . $directiveValue . "|";
-                        }
-                        if($directiveName eq "AddType")
-                        {
-                            #Equivalent IIS tag => MimeMap
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][ADDTYPE] = $arrayDir[$rowDirCount][ADDTYPE] . $directiveValue . "|";
-                        }
-                        if($directiveName eq "AuthName")
-                        {
-                            #Equivalent IIS tag => Not Applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][AUTHNAME] = $directiveValue;
-                        }
-                        if($directiveName eq "AuthType")
-                        {
-                            #Equivalent IIS tag => Not Applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][AUTHTYPE] = $directiveValue;
-                        }
-                        if($directiveName eq "AuthUserFile")
-                        {
-                            #Equivalent IIS tag => Not Applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            if($directiveValue =~ /^\//)
-                            {
-                                $arrayDir[$rowDirCount][AUTHUSERFILE] = $directiveValue;
-                            }
-                            else
-                            {
-                                
-                                $arrayDir[$rowDirCount][AUTHUSERFILE] = $arrayDir[$rowDirCount][SERVERROOT] . $directiveValue;
-                            }
-                        }
-                        if($directiveName eq "AuthGroupFile")
-                        {
-                            #Equivalent IIS tag => Not Applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            if($directiveValue =~ /^\//)
-                            {
-                                $arrayDir[$rowDirCount][AUTHGROUPFILE] = $directiveValue;
-                            }
-                            else
-                            {
-                                
-                                $arrayDir[$rowDirCount][AUTHGROUPFILE] = $arrayDir[$rowDirCount][SERVERROOT] . $directiveValue;
-                            }
-                        }
-                        if($directiveName eq "DefaultType")
-                        {
-                            #Equivalent IIS tag => MimeMap
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            my $temp = $directiveValue . " " . ".*";
-                            $arrayDir[$rowDirCount][ADDTYPE] = $arrayDir[$rowDirCount][ADDTYPE] . $temp . "|";
-                        }
-                        if($directiveName eq "Deny")
-                        {
-                            #Equivalent IIS tag => MimeMap
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][DENY] = $directiveValue;
-                        }
-                        
-                        if($directiveName eq "DirectoryIndex")
-                        {
-                            #Equivalent IIS tag => EnableDirBrowsing;
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][DIRECTORYINDEX] = $directiveValue;
-                            $arrayDir[$rowDirCount][DIRECTORYINDEX] =~ s/ /,/g;
-                        }
-                        if($directiveName eq "ErrorDocument")
-                        {
-                            #Equivalent IIS tag => HttpErrors
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][ERRORDOCUMENT] = $arrayDir[$rowDirCount][ERRORDOCUMENT] . $directiveValue . " ";
-                        }
-                        if($directiveName eq "ExpiresActive")
-                        {
-                            #Equivalent IIS tag => HttpExpires
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][EXPIRESACTIVE] = $directiveValue;
-                        }
-                        if($directiveName eq "HostnameLookups")
-                        {
-                            #Equivalent IIS tag => EnableReverseDNS
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][HOSTNAMELOOKUPS] = $directiveValue;
-                        }
-                        if($directiveName eq "IdentityCheck")
-                        {
-                            #Equivalent IIS tag => LogExtFileUserName
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][IDENTITYCHECK] = $directiveValue;
-                        }
-                        if($directiveName eq "AllowOverride")
-                        {
-                            #Equivalent IIS tag => Not Applicable.
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $arrayDir[$rowDirCount][ALLOWOVERRIDE] = $directiveValue;
-                        }
-                        if($directiveName eq "Header")
-                        {
-                            #Equivalent IIS tag => HttpCustomHeaders
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $directiveValue =~ s/"//g;
-                            if($directiveValue =~ /^set/)
-                            {
-                                
-                                $arrayDir[$rowDirCount][HEADER] = $arrayDir[$rowDirCount][HEADER] . $directiveValue . "|" ;
-                            }
-                        }
-                        if($directiveName eq "Files")
-                        {
-                            my @fileTmp;
-                            my $Dcide = 1;
-                            if($arrayDir[$rowDirCount][ALLOWOVERRIDE] eq "All")
-                            {                                
-                                @fileTmp = ftp_checkFilePresence($arrayDir[$rowDirCount][DIRECTORY]);
-                                foreach(@fileTmp)
-                                {
-                                    if($_ =~ /^total/)
-                                    {                                            
-                                        #Dont do anything                                            
-                                    }
-                                    elsif($_ =~ /^d/)
-                                    {                                            
-                                        #Dont do anything                                            
-                                    }
-                                    elsif($_ eq "")
-                                    {                                            
-                                        #Dont do anything                                            
-                                    }
-                                    else
-                                    {
-                                        my $fileName = pars_FileNameSet($_);
-                                        if($fileName eq $arrayDir[$rowDirCount][ACCESSFILENAME])
-                                        {
-                                            $Dcide = 0;
-                                            last;           
-                                        }                                            
-                                    }                                        
-                                }
-                            }
-                            
-                            if($Dcide)
-                            {
-                                
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                my $numPass;
-                                $numPass  = 1;
-                                if($directiveValue =~ /^~/)
-                                {
-                                    $fileMatch = 1;
-                                    my @temp;
-                                    @temp = split / /,$directiveValue;
-                                    $directiveName = "FilesMatch";
-                                    $directiveValue = $temp[1];
-                                    
-                                    chomp($directiveValue);
-                                    $directiveValue =~ s/"//g;
-                                    $directiveValue =~ s/^\s+//;
-                                    $directiveValue =~ s/\s+$//;                                        
-                                }
-                                else
-                                {
-                                    my @file;
-                                    my $fileList;
-                                    my @fileEntire;
-                                    my $temp;
-                                    my $counter = 0;
-                                    my @Listing;
-                                    my $singleEntry;
-                                    my @fileEntire;
-                                    my @filePath;
-                                    my $singleEntry;
-                                    my $count = 0;
-                                    my $files;
-                                    my @tempArray;
-                                    @Listing = pars_GetDirlistinght("$arrayDir[$rowDirCount][DIRECTORY]");
-                                    my $rootDir;
-                                    $rootDir = $arrayDir[$rowDirCount][DIRECTORY];
-                                    
-                                    foreach $singleEntry (@Listing)
-                                    {                                            
-                                        if($singleEntry =~ /:$/)
-                                        {
-                                            #Dont do anything
-                                            $singleEntry =~ s/:$//;
-                                            $rootDir = $singleEntry;
-                                            chomp($rootDir);                                                
-                                        }
-                                        elsif($singleEntry =~ /^total/)
-                                        {                                                
-                                            #Dont do anything                                               
-                                        }
-                                        elsif($singleEntry =~ /^d/)
-                                        {                                                
-                                            #Dont do anything                                               
-                                        }
-                                        elsif($singleEntry eq "")
-                                        {                                                
-                                            #Dont do anything                                               
-                                        }
-                                        else
-                                        {
-                                            $fileEntire[$count] = pars_FileNameSet($singleEntry);
-                                            $filePath[$count] = $rootDir;
-                                            $count++;
-                                        }
-                                    }
-                                    my $indI = 0;
-                                    my $dirValue = $directiveValue;
-                                    foreach $temp (@fileEntire)
-                                    {
-                                        $directiveValue =~ s/"//g;
-                                        $directiveValue =~ s/^\s+//;
-                                        $directiveValue =~ s/\s+$//;
-                                        
-                                        if($temp eq $dirValue)
-                                        {
-                                            if($numPass)
-                                            {
-                                                $files = $temp;
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                ++$filecount;
-                                                $files[$filecount][SITENAME] = $array[$rowCount][SITENAME];
-                                                $files[$filecount][DOCUMENTROOT] = $array[$rowCount][DOCUMENTROOT];
-                                                $files[$filecount][FILESMATCH] = $files;
-                                                $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                                $files[$filecount][HOSTNAMELOOKUPS] = "Off";
-                                                $files[$filecount][IDENTITYCHECK] = "Off";
-                                                $files[$filecount][ALLOWOVERRIDE] = "All";
-                                                while (&pars_getNextDirective() == 1)
-                                                {
-                                                    if($directiveName eq "/Files")
-                                                    {
-                                                        last;
-                                                    }
-                                                    if($directiveName eq "Options")
-                                                    {
-                                                        #Equivalent IIS tag => AccessExecute
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][OPTIONS] = $files[$filecount][OPTIONS] . $directiveValue . " ";
-                                                    }
-                                                    if($directiveName eq "Order")
-                                                    {
-                                                        #Equivalent IIS tag => Not applicable
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][ORDER] = $directiveValue;
-                                                    }
-                                                    if($directiveName eq "AddEncoding")
-                                                    {
-                                                        #Equivalent IIS tag => MimeMap
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][ADDENCODING] = $files[$filecount][ADDENCODING] . $directiveValue . "|";
-                                                    }
-                                                    if($directiveName eq "AddType")
-                                                    {
-                                                        #Equivalent IIS tag => MimeMap
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $directiveValue . "|";
-                                                    }
-                                                    if($directiveName eq "AuthName")
-                                                    {
-                                                        #Equivalent IIS tag => Not Applicable
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][AUTHNAME] = $directiveValue;
-                                                    }
-                                                    if($directiveName eq "AuthType")
-                                                    {
-                                                        #Equivalent IIS tag => Not Applicable
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][AUTHTYPE] = $directiveValue;
-                                                    }
-                                                    if($directiveName eq "AuthUserFile")
-                                                    {
-                                                        #Equivalent IIS tag => Not Applicable
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        if($directiveValue =~ /^\//)
-                                                        {
-                                                            $files[$filecount][AUTHUSERFILE] = $directiveValue;
-                                                        }
-                                                        else
-                                                        {                                                                
-                                                            $files[$filecount][AUTHUSERFILE] = $arrayDir[0][SERVERROOT] . $directiveValue;
-                                                        }                                                            
-                                                    }
-                                                    if($directiveName eq "AuthGroupFile")
-                                                    {
-                                                        #Equivalent IIS tag => Not Applicable
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        if($directiveValue =~ /^\//)
-                                                        {
-                                                            $files[$filecount][AUTHGROUPFILE] = $directiveValue;                                                                
-                                                        }
-                                                        else
-                                                        {                                                                
-                                                            $files[$filecount][AUTHGROUPFILE] = $array[0][SERVERROOT] . $directiveValue;
-                                                        }
-                                                    }
-                                                    if($directiveName eq "DefaultType")
-                                                    {
-                                                        #Equivalent IIS tag => MimeMap
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        
-                                                        my $temp = $directiveValue . " " . ".*";
-                                                        $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $temp . "|";
-                                                    }
-                                                    if($directiveName eq "Deny")
-                                                    {
-                                                        #Equivalent IIS tag => MimeMap
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][DENY] = $directiveValue;
-                                                    }
-                                                    if($directiveName eq "DirectoryIndex")
-                                                    {
-                                                        #Equivalent IIS tag => EnableDirBrowsing;
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][DIRECTORYINDEX] = $directiveValue;
-                                                        $files[$filecount][DIRECTORYINDEX] =~ s/ /,/g;
-                                                    }
-                                                    if($directiveName eq "ErrorDocument")
-                                                    {
-                                                        #Equivalent IIS tag => HttpErrors
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][ERRORDOCUMENT] = $files[$filecount][ERRORDOCUMENT] . $directiveValue . " ";
-                                                    }
-                                                    if($directiveName eq "ExpiresActive")
-                                                    {
-                                                        #Equivalent IIS tag => HttpExpires
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][EXPIRESACTIVE] = $directiveValue;
-                                                    }
-                                                    if($directiveName eq "HostnameLookups")
-                                                    {
-                                                        #Equivalent IIS tag => EnableReverseDNS
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][HOSTNAMELOOKUPS] = $directiveValue;
-                                                    }
-                                                    if($directiveName eq "IdentityCheck")
-                                                    {
-                                                        #Equivalent IIS tag => LogExtFileUserName
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][IDENTITYCHECK] = $directiveValue;
-                                                    }
-                                                    if($directiveName eq "AllowOverride")
-                                                    {
-                                                        #Equivalent IIS tag => Not Applicable.
-                                                        $directiveValue =~ s/^\s+//;
-                                                        $directiveValue =~ s/\s+$//;
-                                                        $files[$filecount][ALLOWOVERRIDE] = $directiveValue;
-                                                    }
-                                                }
-                                                $numPass = 0;
-                                            }
-                                            else
-                                            {
-                                                my $kk = 0;
-                                                my $jj = 0;
-                                                ++$filecount;
-                                                
-                                                for($kk = 0; $kk < $maxColumn;$kk++)
-                                                {
-                                                    $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                                                }
-                                                
-                                                $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                            }
-                                        }
-                                        $indI++;
-                                    }
-                                }
-                            }
-                        }
-                        if($directiveName eq "FilesMatch")
-                        {
-                            my @file;
-                            my $fileList;
-                            my @fileEntire;
-                            my $temp;
-                            my $counter = 0;
-                            my @Listing;
-                            my $singleEntry;
-                            my @fileEntire;
-                            my @filePath;
-                            my $singleEntry;
-                            my $count = 0;
-                            my $files;
-                            my @tempArray;
-                            my $numPass = 1;
-                            my $Dcide = 1;
-                            my @fileTmp;
-                            if($arrayDir[$rowDirCount][ALLOWOVERRIDE] eq "All")
-                            {
-                                @fileTmp = ftp_checkFilePresence($arrayDir[$rowDirCount][DIRECTORY]);
-                                foreach(@fileTmp)
-                                {
-                                    if($_ =~ /^total/)
-                                    {                                            
-                                        #Dont do anything                                            
-                                    }
-                                    elsif($_ =~ /^d/)
-                                    {                                            
-                                        #Dont do anything                                            
-                                    }
-                                    elsif($_ eq "")
-                                    {                                            
-                                        #Dont do anything                                            
-                                    }
-                                    else
-                                    {
-                                        my $fileName = pars_FileNameSet($_);
-                                        if($fileName eq $arrayDir[$rowDirCount][ACCESSFILENAME])
-                                        {
-                                            $Dcide = 0;
-                                            last;
-                                        }                                            
-                                    }                                        
-                                }
-                            }
-                            
-                            if($Dcide)
-                            {
-                                @Listing = pars_GetDirlistinght("$arrayDir[$rowDirCount][DIRECTORY]");
-                                my $rootDir;
-                                $rootDir = $arrayDir[$rowDirCount][DIRECTORY];
-                                foreach $singleEntry (@Listing)
-                                {
-                                    
-                                    if($singleEntry =~ /:$/)
-                                    {
-                                        #Dont do anything
-                                        $singleEntry =~ s/:$//;
-                                        $rootDir = $singleEntry;
-                                        chomp($rootDir);
-                                        
-                                    }
-                                    elsif($singleEntry =~ /^total/)
-                                    {                                            
-                                        #Dont do anything                                           
-                                    }
-                                    elsif($singleEntry =~ /^d/)
-                                    {                                            
-                                        #Dont do anything                                           
-                                    }
-                                    elsif($singleEntry eq "")
-                                    {                                            
-                                        #Dont do anything                                           
-                                    }
-                                    else
-                                    {
-                                        $fileEntire[$count] = pars_FileNameSet($singleEntry);
-                                        $filePath[$count] = $rootDir;
-                                        $count++;
-                                    }
-                                }
-                                my $indI = 0;
-                                my $dirValue = $directiveValue;
-                                foreach $temp (@fileEntire)
-                                {                                        
-                                    $directiveValue =~ s/"//g;
-                                    $directiveValue =~ s/^\s+//;
-                                    $directiveValue =~ s/\s+$//;
-                                    
-                                    if($temp =~ /$dirValue/)
-                                    {
-                                        if($numPass)
-                                        {   
-                                            $files = $temp;
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            ++$filecount;
-                                            $files[$filecount][SITENAME] = $array[$rowCount][SITENAME];
-                                            $files[$filecount][DOCUMENTROOT] = $array[$rowCount][DOCUMENTROOT];
-                                            $files[$filecount][FILESMATCH] = $files;
-                                            $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                            $files[$filecount][HOSTNAMELOOKUPS] = "Off";
-                                            $files[$filecount][IDENTITYCHECK] = "Off";
-                                            $files[$filecount][ALLOWOVERRIDE] = "All";
-                                            while (&pars_getNextDirective() == 1)
-                                            {
-                                                if($directiveName eq "/FilesMatch")
-                                                {
-                                                    last;
-                                                }
-                                                if($fileMatch)
-                                                {
-                                                    if($directiveName eq "/Files")
-                                                    {
-                                                        
-                                                        $fileMatch = 0;
-                                                        last;
-                                                    }
-                                                }
-                                                if($directiveName eq "Options")
-                                                {
-                                                    #Equivalent IIS tag => AccessExecute
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][OPTIONS] = $files[$filecount][OPTIONS] . $directiveValue . " ";
-                                                }
-                                                if($directiveName eq "Order")
-                                                {
-                                                    #Equivalent IIS tag => Not applicable
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][ORDER] = $directiveValue;
-                                                }
-                                                if($directiveName eq "AddEncoding")
-                                                {
-                                                    #Equivalent IIS tag => MimeMap
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][ADDENCODING] = $files[$filecount][ADDENCODING] . $directiveValue . "|";
-                                                }
-                                                if($directiveName eq "AddType")
-                                                {
-                                                    #Equivalent IIS tag => MimeMap
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $directiveValue . "|";
-                                                }
-                                                if($directiveName eq "AuthName")
-                                                {
-                                                    #Equivalent IIS tag => Not Applicable
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][AUTHNAME] = $directiveValue;
-                                                }
-                                                if($directiveName eq "AuthType")
-                                                {
-                                                    #Equivalent IIS tag => Not Applicable
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][AUTHTYPE] = $directiveValue;
-                                                }
-                                                if($directiveName eq "AuthUserFile")
-                                                {
-                                                    #Equivalent IIS tag => Not Applicable
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    if($directiveValue =~ /^\//)
-                                                    {
-                                                        $files[$filecount][AUTHUSERFILE] = $directiveValue;
-                                                    }
-                                                    else
-                                                    {
-                                                        
-                                                        $files[$filecount][AUTHUSERFILE] = $arrayDir[0][SERVERROOT] . $directiveValue;
-                                                    }
-                                                    
-                                                }
-                                                if($directiveName eq "AuthGroupFile")
-                                                {
-                                                    #Equivalent IIS tag => Not Applicable
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    if($directiveValue =~ /^\//)
-                                                    {
-                                                        $files[$filecount][AUTHGROUPFILE] = $directiveValue;
-                                                        
-                                                    }
-                                                    else
-                                                    {
-                                                        
-                                                        $files[$filecount][AUTHGROUPFILE] = $array[0][SERVERROOT] . $directiveValue;
-                                                    }
-                                                }
-                                                if($directiveName eq "DefaultType")
-                                                {
-                                                    #Equivalent IIS tag => MimeMap
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    
-                                                    my $temp = $directiveValue . " " . ".*";
-                                                    $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $temp . "|";
-                                                }
-                                                if($directiveName eq "Deny")
-                                                {
-                                                    #Equivalent IIS tag => MimeMap
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][DENY] = $directiveValue;
-                                                }
-                                                if($directiveName eq "DirectoryIndex")
-                                                {
-                                                    #Equivalent IIS tag => EnableDirBrowsing;
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][DIRECTORYINDEX] = $directiveValue;
-                                                    $files[$filecount][DIRECTORYINDEX] =~ s/ /,/g;
-                                                }
-                                                if($directiveName eq "ErrorDocument")
-                                                {
-                                                    #Equivalent IIS tag => HttpErrors
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][ERRORDOCUMENT] = $files[$filecount][ERRORDOCUMENT] . $directiveValue . " ";
-                                                }
-                                                if($directiveName eq "ExpiresActive")
-                                                {
-                                                    #Equivalent IIS tag => HttpExpires
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][EXPIRESACTIVE] = $directiveValue;
-                                                }
-                                                if($directiveName eq "HostnameLookups")
-                                                {
-                                                    #Equivalent IIS tag => EnableReverseDNS
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][HOSTNAMELOOKUPS] = $directiveValue;
-                                                }
-                                                if($directiveName eq "IdentityCheck")
-                                                {
-                                                    #Equivalent IIS tag => LogExtFileUserName
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][IDENTITYCHECK] = $directiveValue;
-                                                }
-                                                if($directiveName eq "AllowOverride")
-                                                {
-                                                    #Equivalent IIS tag => Not Applicable.
-                                                    $directiveValue =~ s/^\s+//;
-                                                    $directiveValue =~ s/\s+$//;
-                                                    $files[$filecount][ALLOWOVERRIDE] = $directiveValue;
-                                                }
-                                            }
-                                            $numPass = 0;
-                                        }
-                                        else
-                                        {
-                                            my $kk = 0;
-                                            my $jj = 0;
-                                            ++$filecount;
-                                            
-                                            for($kk = 0; $kk < $maxColumn;$kk++)
-                                            {
-                                                $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                                            }
-                                            
-                                            $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                            $files[$filecount][FILESMATCH] = $temp;
-                                        }
-                                    }
-                                    $indI++;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if($directiveName eq "DirectoryMatch")
-    {
-        if($directiveValue =~ /^\//)
-        {
-            my $dirList;
-            my @dir;
-            my $temp;
-            my $counter = 0;
-            my @dirEntire;
-            my @Listing;
-            my $singleEntry;
-            my $count = 0;
-            my $filesName = "";
-            my $filesMatchName = "";
-            #the variable $test_dir below should be populted with the list of directory names
-            @Listing = `ls -lRa "/" 2>/dev/null`;
-            foreach $singleEntry (@Listing)
-            {
-                if($singleEntry =~ /:$/)
-                {
-                    $singleEntry =~ s/://;
-                    $dirEntire[$count] = $singleEntry;
-                    $count++;
-                }
-                elsif($singleEntry =~ /^total/)
-                {                       
-                    #Dont do anything
-                }
-                elsif($singleEntry =~ /^d/)
-                {                       
-                    #Dont do anything                        
-                }
-                elsif($singleEntry eq "")
-                {                       
-                    #Dont do anything                        
-                }                    
-            }
-            foreach $temp (@dirEntire)
-            {
-                $directiveValue =~ s/"//g;
-                $directiveValue =~ s/^\s+//;
-                $directiveValue =~ s/\s+$//;
-                
-                if($temp =~ /$directiveValue/)
-                {
-                    chomp($temp);                       
-                    $dir[$counter] = $temp;
-                    $counter++;
-                }
-            }
-            if($#dir >= 0)
-            {
-                $temp = $dir[0];                            
-                
-                $directiveValue =~ s/^\s+//;
-                $directiveValue =~ s/\s+$//;
-                ++$rowDirCount;
-                $arrayDir[$rowDirCount][SERVERROOT] = "/usr/local/apache/";
-                $arrayDir[$rowDirCount][SITENAME] = $array[$rowCount][SITENAME];
-                $arrayDir[$rowDirCount][DIRECTORY] = $temp;
-                $arrayDir[$rowDirCount][HOSTNAMELOOKUPS] = "Off";
-                $arrayDir[$rowDirCount][IDENTITYCHECK] = "Off";
-                $arrayDir[$rowDirCount][ALLOWOVERRIDE] = "All";
-                $arrayDir[$rowDirCount][DESTINATIONPATH] = $array[$rowCount][DESTINATIONPATH];
-                $arrayDir[$rowDirCount][DESTINATIONPATH] =~ s/\\/\//g;
-                
-                if(index($arrayDir[$rowDirCount][DIRECTORY],$array[$rowCount][DOCUMENTROOT]) != 0)  
-                {
-                    $arrayDir[$rowDirCount][TASKLIST]  = 1;
-                    $arrayDir[$rowDirCount][DESTINATIONPATH] = $arrayDir[$rowDirCount][DESTINATIONPATH] . $arrayDir[$rowDirCount][DIRECTORY]; 
-                }
-                else
-                {
-                    my $temp;
-                    $temp = pars_getRelativePath($arrayDir[$rowDirCount][DIRECTORY],$array[$rowCount][DOCUMENTROOT]);
-                    $arrayDir[$rowDirCount][DESTINATIONPATH] = $arrayDir[$rowDirCount][DESTINATIONPATH] . $temp; 
-                    
-                }
-                if($arrayDir[$rowDirCount][DESTINATIONPATH] =~ /\/$/)
-                {
-                    $arrayDir[$rowDirCount][DESTINATIONPATH] =~ s/\/$//;
-                }
-                
-                while (&pars_getNextDirective() == 1)
-                {
-                    if($directiveName eq "/DirectoryMatch")
-                    {
-                        last;
-                    }
-                    if($dirMatch)
-                    {
-                        if($directiveName eq "/Directory")
-                        {
-                            
-                            $dirMatch = 0;
-                            last;
-                        }
-                    }
-                    if($directiveName eq "Options")
-                    {
-                        #Equivalent IIS tag => AccessExecute
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][OPTIONS] = $arrayDir[$rowDirCount][OPTIONS] . $directiveValue . " ";
-                    }
-                    if($directiveName eq "Order")
-                    {
-                        #Equivalent IIS tag => Not applicable
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][ORDER] = $directiveValue;
-                    }
-                    if($directiveName eq "AddEncoding")
-                    {
-                        #Equivalent IIS tag => MimeMap
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][ADDENCODING] = $arrayDir[$rowDirCount][ADDENCODING] . $directiveValue . "|";
-                    }
-                    if($directiveName eq "AddType")
-                    {
-                        #Equivalent IIS tag => MimeMap
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][ADDTYPE] = $arrayDir[$rowDirCount][ADDTYPE] . $directiveValue . "|";
-                    }
-                    if($directiveName eq "AuthName")
-                    {
-                        #Equivalent IIS tag => Not Applicable
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][AUTHNAME] = $directiveValue;
-                    }
-                    if($directiveName eq "AuthType")
-                    {
-                        #Equivalent IIS tag => Not Applicable
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][AUTHTYPE] = $directiveValue;
-                    }
-                    if($directiveName eq "AuthUserFile")
-                    {
-                        #Equivalent IIS tag => Not Applicable
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        if($directiveValue =~ /^\//)
-                        {
-                            $arrayDir[$rowDirCount][AUTHUSERFILE] = $directiveValue;                                
-                        }
-                        else
-                        {                                
-                            $arrayDir[$rowDirCount][AUTHUSERFILE] = $arrayDir[$rowDirCount][SERVERROOT] . $directiveValue;
-                        }
-                    }
-                    if($directiveName eq "AuthGroupFile")
-                    {
-                        #Equivalent IIS tag => Not Applicable
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        if($directiveValue =~ /^\//)
-                        {
-                            $arrayDir[$rowDirCount][AUTHGROUPFILE] = $directiveValue;
-                            
-                        }
-                        else
-                        {
-                            
-                            $arrayDir[$rowDirCount][AUTHGROUPFILE] = $arrayDir[$rowDirCount][SERVERROOT] . $directiveValue;
-                        }
-                    }
-                    if($directiveName eq "DefaultType")
-                    {
-                        #Equivalent IIS tag => MimeMap
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        
-                        my $temp = $directiveValue . " " . ".*";
-                        $arrayDir[$rowDirCount][ADDTYPE] = $arrayDir[$rowDirCount][ADDTYPE] . $temp . "|";
-                    }
-                    if($directiveName eq "Deny")
-                    {
-                        #Equivalent IIS tag => MimeMap
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][DENY] = $directiveValue;
-                    }
-                    if($directiveName eq "DirectoryIndex")
-                    {
-                        #Equivalent IIS tag => EnableDirBrowsing;
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][DIRECTORYINDEX] = $directiveValue;
-                        $arrayDir[$rowDirCount][DIRECTORYINDEX] =~ s/ /,/g;
-                    }
-                    if($directiveName eq "ErrorDocument")
-                    {
-                        #Equivalent IIS tag => HttpErrors
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][ERRORDOCUMENT] = $arrayDir[$rowDirCount][ERRORDOCUMENT] . $directiveValue . " ";
-                    }
-                    if($directiveName eq "ExpiresActive")
-                    {
-                        #Equivalent IIS tag => HttpExpires
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][EXPIRESACTIVE] = $directiveValue;
-                    }
-                    if($directiveName eq "HostnameLookups")
-                    {
-                        #Equivalent IIS tag => EnableReverseDNS
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][HOSTNAMELOOKUPS] = $directiveValue;
-                    }
-                    if($directiveName eq "IdentityCheck")
-                    {
-                        #Equivalent IIS tag => LogExtFileUserName
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][IDENTITYCHECK] = $directiveValue;
-                    }
-                    if($directiveName eq "AllowOverride")
-                    {
-                        #Equivalent IIS tag => Not Applicable.
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $arrayDir[$rowDirCount][ALLOWOVERRIDE] = $directiveValue;
-                    }
-                    if($directiveName eq "Header")
-                    {
-                        #Equivalent IIS tag => HttpCustomHeaders
-                        
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        $directiveValue =~ s/"//g;
-                        if($directiveValue =~ /^set/)
-                        {
-                            $arrayDir[$rowDirCount][HEADER] = $arrayDir[$rowDirCount][HEADER] . $directiveValue . "|" ;
-                        }
-                    }
-                    if($directiveName eq "Files")
-                    {
-                        $filesName = $directiveValue;
-    
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-    
-                        my $numPass;
-                        $numPass  = 1;
-                        if($directiveValue =~ /^~/)
-                        {
-                            $fileMatch = 1;
-                            my @temp;
-                            @temp = split / /,$directiveValue;
-                            $directiveName = "FilesMatch";
-                            $directiveValue = $temp[1];
-                            
-                            chomp($directiveValue);
-                            $directiveValue =~ s/"//g;
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;                                
-                        }
-                        else
-                        {
-                            my @file;
-                            my $fileList;
-                            my @fileEntire;
-                            my $temp;
-                            my $counter = 0;
-                            my @Listing;
-                            my $singleEntry;
-                            my @fileEntire;
-                            my @filePath;
-                            my $singleEntry;
-                            my $count = 0;
-                            my $files;
-                            my @tempArray;
-                            
-                            @Listing = pars_GetDirlistinght("$arrayDir[$rowDirCount][DIRECTORY]");
-                            my $rootDir;
-                            $rootDir = $arrayDir[$rowDirCount][DIRECTORY];
-                            
-                            foreach $singleEntry (@Listing)
-                            {
-                                
-                                if($singleEntry =~ /:$/)
-                                {
-                                    #Dont do anything
-                                    $singleEntry =~ s/:$//;
-                                    $rootDir = $singleEntry;
-                                    chomp($rootDir);
-                                    
-                                }
-                                elsif($singleEntry =~ /^total/)
-                                {                                        
-                                    #Dont do anything                                       
-                                }
-                                elsif($singleEntry =~ /^d/)
-                                {                                        
-                                    #Dont do anything                                       
-                                }
-                                elsif($singleEntry eq "")
-                                {                                        
-                                    #Dont do anything                                       
-                                }
-                                else
-                                {
-                                    $fileEntire[$count] = pars_FileNameSet($singleEntry);
-                                    $filePath[$count] = $rootDir;
-                                    $count++;
-                                }
-                            }
-                            my $indI = 0;
-                            my $dirValue = $directiveValue;
-                            foreach $temp (@fileEntire)
-                            {
-                                $directiveValue =~ s/"//g;
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                
-                                if($temp eq $dirValue)
-                                {
-                                    if($numPass)
-                                    {
-                                        $files = $temp;
-                                        $directiveValue =~ s/^\s+//;
-                                        $directiveValue =~ s/\s+$//;
-                                        ++$filecount;
-                                        $files[$filecount][SITENAME] =  $array[$rowCount][SITENAME];
-                                        $files[$filecount][DOCUMENTROOT] =  $array[$rowCount][DOCUMENTROOT];
-                                        $files[$filecount][FILESMATCH] = $files;
-                                        $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                        $files[$filecount][HOSTNAMELOOKUPS] = "Off";
-                                        $files[$filecount][IDENTITYCHECK] = "Off";
-                                        $files[$filecount][ALLOWOVERRIDE] = "All";
-                                        while (&pars_getNextDirective() == 1)
-                                        {
-                                            if($directiveName eq "/Files")
-                                            {
-                                                last;
-                                            }
-                                            if($directiveName eq "Options")
-                                            {
-                                                #Equivalent IIS tag => AccessExecute
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][OPTIONS] = $files[$filecount][OPTIONS] . $directiveValue . " ";
-                                            }
-                                            if($directiveName eq "Order")
-                                            {
-                                                #Equivalent IIS tag => Not applicable
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][ORDER] = $directiveValue;
-                                            }
-                                            if($directiveName eq "AddEncoding")
-                                            {
-                                                #Equivalent IIS tag => MimeMap
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][ADDENCODING] = $files[$filecount][ADDENCODING] . $directiveValue . "|";
-                                            }
-                                            if($directiveName eq "AddType")
-                                            {
-                                                #Equivalent IIS tag => MimeMap
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $directiveValue . "|";
-                                            }
-                                            if($directiveName eq "AuthName")
-                                            {
-                                                #Equivalent IIS tag => Not Applicable
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][AUTHNAME] = $directiveValue;
-                                            }
-                                            if($directiveName eq "AuthType")
-                                            {
-                                                #Equivalent IIS tag => Not Applicable
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][AUTHTYPE] = $directiveValue;
-                                            }
-                                            if($directiveName eq "AuthUserFile")
-                                            {
-                                                #Equivalent IIS tag => Not Applicable
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                if($directiveValue =~ /^\//)
-                                                {
-                                                    $files[$filecount][AUTHUSERFILE] = $directiveValue;
-                                                }
-                                                else
-                                                {
-                                                    
-                                                    $files[$filecount][AUTHUSERFILE] = $arrayDir[0][SERVERROOT] . $directiveValue;
-                                                }
-                                                
-                                            }
-                                            if($directiveName eq "AuthGroupFile")
-                                            {
-                                                #Equivalent IIS tag => Not Applicable
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                if($directiveValue =~ /^\//)
-                                                {
-                                                    $files[$filecount][AUTHGROUPFILE] = $directiveValue;
-                                                    
-                                                }
-                                                else
-                                                {
-                                                    
-                                                    $files[$filecount][AUTHGROUPFILE] = $array[0][SERVERROOT] . $directiveValue;
-                                                }
-                                            }
-                                            if($directiveName eq "DefaultType")
-                                            {
-                                                #Equivalent IIS tag => MimeMap
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                
-                                                my $temp = $directiveValue . " " . ".*";
-                                                $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $temp . "|";
-                                            }
-                                            if($directiveName eq "Deny")
-                                            {
-                                                #Equivalent IIS tag => MimeMap
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][DENY] = $directiveValue;
-                                            }
-                                            if($directiveName eq "DirectoryIndex")
-                                            {
-                                                #Equivalent IIS tag => EnableDirBrowsing;
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][DIRECTORYINDEX] = $directiveValue;
-                                                $files[$filecount][DIRECTORYINDEX] =~ s/ /,/g;
-                                            }
-                                            if($directiveName eq "ErrorDocument")
-                                            {
-                                                #Equivalent IIS tag => HttpErrors
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][ERRORDOCUMENT] = $files[$filecount][ERRORDOCUMENT] . $directiveValue . " ";
-                                            }
-                                            if($directiveName eq "ExpiresActive")
-                                            {
-                                                #Equivalent IIS tag => HttpExpires
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][EXPIRESACTIVE] = $directiveValue;
-                                            }
-                                            if($directiveName eq "HostnameLookups")
-                                            {
-                                                #Equivalent IIS tag => EnableReverseDNS
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][HOSTNAMELOOKUPS] = $directiveValue;
-                                            }
-                                            if($directiveName eq "IdentityCheck")
-                                            {
-                                                #Equivalent IIS tag => LogExtFileUserName
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][IDENTITYCHECK] = $directiveValue;
-                                            }
-                                            if($directiveName eq "AllowOverride")
-                                            {
-                                                #Equivalent IIS tag => Not Applicable.
-                                                $directiveValue =~ s/^\s+//;
-                                                $directiveValue =~ s/\s+$//;
-                                                $files[$filecount][ALLOWOVERRIDE] = $directiveValue;
-                                            }
-                                        }
-                                        $numPass = 0;
-                                    }
-                                    else
-                                    {
-                                        my $kk = 0;
-                                        my $jj = 0;
-                                        ++$filecount;
-                                        
-                                        for($kk = 0; $kk < $maxColumn;$kk++)
-                                        {
-                                            $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                                        }
-                                        
-                                        $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                    }
-                                }
-                                $indI++;
-                            }
-                        }
-                    }
-                    if($directiveName eq "FilesMatch")
-                    {
-                        my @file;
-                        my $fileList;
-                        my @fileEntire;
-                        my $temp;
-                        my $counter = 0;
-                        my @Listing;
-                        my $singleEntry;
-                        my @fileEntire;
-                        my @filePath;
-                        my $singleEntry;
-                        my $count = 0;
-                        my $files;
-                        my @tempArray;
-                        my $numPass = 1;
-                        $filesMatchName = $directiveValue;
-                        
-                        @Listing = pars_GetDirlistinght("$arrayDir[$rowDirCount][DIRECTORY]");
-                        my $rootDir;
-                        $rootDir = $arrayDir[$rowDirCount][DIRECTORY];
-                        foreach $singleEntry (@Listing)
-                        {
-                            
-                            if($singleEntry =~ /:$/)
-                            {
-                                #Dont do anything
-                                $singleEntry =~ s/:$//;
-                                $rootDir = $singleEntry;
-                                chomp($rootDir);
-                                
-                            }
-                            elsif($singleEntry =~ /^total/)
-                            {                                    
-                                #Dont do anything                                    
-                            }
-                            elsif($singleEntry =~ /^d/)
-                            {                                   
-                                #Dont do anything                                    
-                            }
-                            elsif($singleEntry eq "")
-                            {                                   
-                                #Dont do anything                                    
-                            }
-                            else
-                            {
-                                $fileEntire[$count] = pars_FileNameSet($singleEntry);
-                                $filePath[$count] = $rootDir;
-                                $count++;
-                            }
-                        }
-                        my $indI = 0;
-                        my $dirValue = $directiveValue;
-                        foreach $temp (@fileEntire)
-                        {
-                            
-                            $directiveValue =~ s/"//g;
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            
-                            if($temp =~ /$dirValue/)
-                            {
-                                if($numPass)
-                                {   
-                                    $files = $temp;
-                                    $directiveValue =~ s/^\s+//;
-                                    $directiveValue =~ s/\s+$//;
-                                    ++$filecount;
-                                    $files[$filecount][SITENAME] =  $array[$rowCount][SITENAME];
-                                    $files[$filecount][DOCUMENTROOT] =  $array[$rowCount][DOCUMENTROOT];
-                                    $files[$filecount][FILESMATCH] = $files;
-                                    $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                    $files[$filecount][HOSTNAMELOOKUPS] = "Off";
-                                    $files[$filecount][IDENTITYCHECK] = "Off";
-                                    $files[$filecount][ALLOWOVERRIDE] = "All";
-                                    while (&pars_getNextDirective() == 1)
-                                    {
-                                        if($directiveName eq "/FilesMatch")
-                                        {
-                                            last;
-                                        }
-                                        if($fileMatch)
-                                        {
-                                            if($directiveName eq "/Files")
-                                            {
-                                                
-                                                $fileMatch = 0;
-                                                last;
-                                            }
-                                        }
-                                        if($directiveName eq "Options")
-                                        {
-                                            #Equivalent IIS tag => AccessExecute
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][OPTIONS] = $files[$filecount][OPTIONS] . $directiveValue . " ";
-                                        }
-                                        if($directiveName eq "Order")
-                                        {
-                                            #Equivalent IIS tag => Not applicable
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][ORDER] = $directiveValue;
-                                        }
-                                        if($directiveName eq "AddEncoding")
-                                        {
-                                            #Equivalent IIS tag => MimeMap
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][ADDENCODING] = $files[$filecount][ADDENCODING] . $directiveValue . "|";
-                                        }
-                                        if($directiveName eq "AddType")
-                                        {
-                                            #Equivalent IIS tag => MimeMap
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $directiveValue . "|";
-                                        }
-                                        if($directiveName eq "AuthName")
-                                        {
-                                            #Equivalent IIS tag => Not Applicable
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][AUTHNAME] = $directiveValue;
-                                        }
-                                        if($directiveName eq "AuthType")
-                                        {
-                                            #Equivalent IIS tag => Not Applicable
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][AUTHTYPE] = $directiveValue;
-                                        }
-                                        if($directiveName eq "AuthUserFile")
-                                        {
-                                            #Equivalent IIS tag => Not Applicable
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            if($directiveValue =~ /^\//)
-                                            {
-                                                $files[$filecount][AUTHUSERFILE] = $directiveValue;
-                                            }
-                                            else
-                                            {
-                                                
-                                                $files[$filecount][AUTHUSERFILE] = $arrayDir[0][SERVERROOT] . $directiveValue;
-                                            }
-                                            
-                                        }
-                                        if($directiveName eq "AuthGroupFile")
-                                        {
-                                            #Equivalent IIS tag => Not Applicable
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            if($directiveValue =~ /^\//)
-                                            {
-                                                $files[$filecount][AUTHGROUPFILE] = $directiveValue;                                                    
-                                            }
-                                            else
-                                            {                                                    
-                                                $files[$filecount][AUTHGROUPFILE] = $array[0][SERVERROOT] . $directiveValue;
-                                            }
-                                        }
-                                        if($directiveName eq "DefaultType")
-                                        {
-                                            #Equivalent IIS tag => MimeMap
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            
-                                            my $temp = $directiveValue . " " . ".*";
-                                            $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $temp . "|";
-                                        }
-                                        if($directiveName eq "Deny")
-                                        {
-                                            #Equivalent IIS tag => MimeMap
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][DENY] = $directiveValue;
-                                        }
-                                        if($directiveName eq "DirectoryIndex")
-                                        {
-                                            #Equivalent IIS tag => EnableDirBrowsing;
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][DIRECTORYINDEX] = $directiveValue;
-                                            $files[$filecount][DIRECTORYINDEX] =~ s/ /,/g;
-                                        }
-                                        if($directiveName eq "ErrorDocument")
-                                        {
-                                            #Equivalent IIS tag => HttpErrors
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][ERRORDOCUMENT] = $files[$filecount][ERRORDOCUMENT] . $directiveValue . " ";
-                                        }
-                                        if($directiveName eq "ExpiresActive")
-                                        {
-                                            #Equivalent IIS tag => HttpExpires
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][EXPIRESACTIVE] = $directiveValue;
-                                        }
-                                        if($directiveName eq "HostnameLookups")
-                                        {
-                                            #Equivalent IIS tag => EnableReverseDNS
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][HOSTNAMELOOKUPS] = $directiveValue;
-                                        }
-                                        if($directiveName eq "IdentityCheck")
-                                        {
-                                            #Equivalent IIS tag => LogExtFileUserName
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][IDENTITYCHECK] = $directiveValue;
-                                        }
-                                        if($directiveName eq "AllowOverride")
-                                        {
-                                            #Equivalent IIS tag => Not Applicable.
-                                            $directiveValue =~ s/^\s+//;
-                                            $directiveValue =~ s/\s+$//;
-                                            $files[$filecount][ALLOWOVERRIDE] = $directiveValue;
-                                        }
-                                    }
-                                    $numPass = 0;
-                                }
-                                else
-                                {
-                                    my $kk = 0;
-                                    my $jj = 0;
-                                    ++$filecount;
-                                    
-                                    for($kk = 0; $kk < $maxColumn;$kk++)
-                                    {
-                                        $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                                    }
-                                    
-                                    $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                    $files[$filecount][FILESMATCH] = $temp;
-                                }
-                            }
-                            $indI++;
-                        }
-                    }
-                }
-            }
-            my $folderCount = $rowDirCount;
-            
-            foreach $temp (@dir)
-            {
-                next if($temp eq $dir[0]);
-                $directiveValue =~ s/^\s+//;
-                $directiveValue =~ s/\s+$//;
-                ++$rowDirCount;
-                my $j;
-                for($j = 0;$j < $maxColumn; $j++)
-                {
-                    $arrayDir[$rowDirCount][$j] = $arrayDir[($rowDirCount-1)][$j];
-                }
-                $arrayDir[$rowDirCount][DIRECTORY] = $temp;
-                $arrayDir[$rowDirCount][DESTINATIONPATH] = $array[$rowCount][DESTINATIONPATH];
-                if(index($arrayDir[$rowDirCount][DIRECTORY],$array[$rowCount][DOCUMENTROOT]) != 0)  
-                {
-                    $arrayDir[$rowDirCount][TASKLIST]  = 1;
-                    $arrayDir[$rowDirCount][DESTINATIONPATH] = $arrayDir[$rowDirCount][DESTINATIONPATH] . $arrayDir[$rowDirCount][DIRECTORY]; 
-                }
-                else
-                {
-                    my $temp;
-                    $temp = pars_getRelativePath($arrayDir[$rowDirCount][DIRECTORY],$array[$rowCount][DOCUMENTROOT]);
-                    $arrayDir[$rowDirCount][DESTINATIONPATH] = $arrayDir[$rowDirCount][DESTINATIONPATH] . $temp; 
-                    
-                }
-            }
-            my $jkl;
-            for($jkl = ($folderCount+1); $jkl <= $rowDirCount; $jkl++)
-            {
-                if($filesName ne "")
-                {
-                    $directiveValue = $filesName;
-                    $directiveValue =~ s/^\s+//;
-                    $directiveValue =~ s/\s+$//;
-                    my @file;
-                    my $fileList;
-                    my @fileEntire;
-                    my $temp;
-                    my $counter = 0;
-                    my @Listing;
-                    my $singleEntry;
-                    my @fileEntire;
-                    my @filePath;
-                    my $singleEntry;
-                    my $count = 0;
-                    my $files;
-                    my @tempArray;
-                    
-                    @Listing = pars_GetDirlistinght("$arrayDir[$jkl][DIRECTORY]");
-                    my $rootDir;
-                    $rootDir = $arrayDir[$jkl][DIRECTORY];
-                    
-                    foreach $singleEntry (@Listing)
-                    {
-                        
-                        if($singleEntry =~ /:$/)
-                        {
-                            #Dont do anything
-                            $singleEntry =~ s/:$//;
-                            $rootDir = $singleEntry;
-                            chomp($rootDir);
-                            
-                        }
-                        elsif($singleEntry =~ /^total/)
-                        {                                
-                            #Dont do anything                                
-                        }
-                        elsif($singleEntry =~ /^d/)
-                        {                                
-                            #Dont do anything                                
-                        }
-                        elsif($singleEntry eq "")
-                        {                                
-                            #Dont do anything                                
-                        }
-                        else
-                        {
-                            $fileEntire[$count] = pars_FileNameSet($singleEntry);
-                            $filePath[$count] = $rootDir;
-                            $count++;
-                        }
-                    }
-                    my $dirValue = $directiveValue;
-                    my $numPass = 1;
-                    my $indI = 0;
-                    foreach $temp (@fileEntire)
-                    {
-                        $directiveValue =~ s/"//g;
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        
-                        if($temp eq $dirValue)
-                        {
-                            if($numPass)
-                            {
-                                $files = $temp;
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                ++$filecount;
-                                $files[$filecount][SITENAME] = $array[$rowCount][SITENAME];
-                                $files[$filecount][DOCUMENTROOT] = $array[$rowCount][DOCUMENTROOT];
-                                $files[$filecount][FILESMATCH] = $files;
-                                $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                $files[$filecount][HOSTNAMELOOKUPS] = "Off";
-                                $files[$filecount][IDENTITYCHECK] = "Off";
-                                $files[$filecount][ALLOWOVERRIDE] = "All";
-                                $numPass = 0;
-                                my $kk = 0;
-                                my $jj = 0;
-                                
-                                for($kk = 0; $kk < $maxColumn;$kk++)
-                                {
-                                    $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                                }
-                                
-                                $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                            }
-                            else
-                            {
-                                my $kk = 0;
-                                my $jj = 0;
-                                ++$filecount;
-                                
-                                for($kk = 0; $kk < $maxColumn;$kk++)
-                                {
-                                    $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                                }
-                                
-                                $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                            }
-                        }
-                        $indI++;
-                    }
-                }
-                if($filesMatchName ne "")
-                {
-                    $directiveValue = $filesName;
-                    $directiveValue =~ s/^\s+//;
-                    $directiveValue =~ s/\s+$//;
-                    my @file;
-                    my $fileList;
-                    my @fileEntire;
-                    my $temp;
-                    my $counter = 0;
-                    my @Listing;
-                    my $singleEntry;
-                    my @fileEntire;
-                    my @filePath;
-                    my $singleEntry;
-                    my $count = 0;
-                    my $files;
-                    my @tempArray;
-                    
-                    @Listing = pars_GetDirlistinght("$arrayDir[$jkl][DIRECTORY]");
-                    my $rootDir;
-                    $rootDir = $arrayDir[$jkl][DIRECTORY];
-                    
-                    foreach $singleEntry (@Listing)
-                    {
-                        
-                        if($singleEntry =~ /:$/)
-                        {
-                            #Dont do anything
-                            $singleEntry =~ s/:$//;
-                            $rootDir = $singleEntry;
-                            chomp($rootDir);
-                            
-                        }
-                        elsif($singleEntry =~ /^total/)
-                        {                                
-                            #Dont do anything                                
-                        }
-                        elsif($singleEntry =~ /^d/)
-                        {                                
-                            #Dont do anything                                
-                        }
-                        elsif($singleEntry eq "")
-                        {                                
-                            #Dont do anything                                
-                        }
-                        else
-                        {
-                            $fileEntire[$count] = pars_FileNameSet($singleEntry);
-                            $filePath[$count] = $rootDir;
-                            $count++;
-                        }
-                    }
-                    my $dirValue = $directiveValue;
-                    my $numPass = 1;
-                    my $indI = 0;
-                    foreach $temp (@fileEntire)
-                    {
-                        $directiveValue =~ s/"//g;
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        
-                        if($temp =~ /$dirValue/)
-                        {
-                            if($numPass)
-                            {
-                                $files = $temp;
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                ++$filecount;
-                                $files[$filecount][SITENAME] = $array[$rowCount][SITENAME];
-                                $files[$filecount][DOCUMENTROOT] = $array[$rowCount][DOCUMENTROOT];
-                                $files[$filecount][FILESMATCH] = $files;
-                                $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                                $files[$filecount][HOSTNAMELOOKUPS] = "Off";
-                                $files[$filecount][IDENTITYCHECK] = "Off";
-                                $files[$filecount][ALLOWOVERRIDE] = "All";
-                                $numPass = 0;
-                                my $kk = 0;
-                                my $jj = 0;
-                                
-                                for($kk = 0; $kk < $maxColumn;$kk++)
-                                {
-                                    $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                                }
-                                
-                                $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                            }
-                            else
-                            {
-                                my $kk = 0;
-                                my $jj = 0;
-                                ++$filecount;
-                                
-                                for($kk = 0; $kk < $maxColumn;$kk++)
-                                {
-                                    $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                                }
-                                
-                                $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                            }
-                        }
-                        $indI++;
-                    }
-                }
-            }
-        }   
-    }
-    if($directiveName eq "Files")
-    {
-        $directiveValue =~ s/^\s+//;
-        $directiveValue =~ s/\s+$//;
-        my $numPass;
-        $numPass = 1;
-        if($directiveValue =~ /^~/)
-        {
-            $fileMatch = 1;
-            my @temp;
-            @temp = split / /,$directiveValue;
-            $directiveName = "FilesMatch";
-            $directiveValue = $temp[1];
-            
-            chomp($directiveValue);
-            $directiveValue =~ s/"//g;
-            $directiveValue =~ s/^\s+//;
-            $directiveValue =~ s/\s+$//;
-        }
-        else
-        {
-            my @file;
-            my $fileList;
-            my @fileEntire;
-            my $temp;
-            my $counter = 0;
-            my @Listing;
-            my $singleEntry;
-            my @fileEntire;
-            my @filePath;
-            my $singleEntry;
-            my $count = 0;
-            my $files;
-            my @tempArray;
-            
-            @Listing = pars_GetDirlistinght("$array[$rowCount][DOCUMENTROOT]");
-            my $rootDir;
-            $rootDir = $array[$rowCount][DOCUMENTROOT];
-            foreach $singleEntry (@Listing)
-            {
-                
-                if($singleEntry =~ /:$/)
-                {
-                    #Dont do anything                        
-                    $singleEntry =~ s/:$//;
-                    $rootDir = $singleEntry;
-                    chomp($rootDir);
-                }
-                elsif($singleEntry =~ /^total/)
-                {                        
-                    #Dont do anything                        
-                }
-                elsif($singleEntry =~ /^d/)
-                {                       
-                    #Dont do anything                        
-                }
-                elsif($singleEntry eq "")
-                {                       
-                    #Dont do anything                        
-                }
-                else
-                {
-                    
-                    $fileEntire[$count] = pars_FileNameSet($singleEntry);
-                    $filePath[$count] = $rootDir;
-                    $count++;
-                }
-            }
-            my $indI = 0;
-            my $dirValue = $directiveValue;
-            foreach $temp (@fileEntire)
-            {
-                $directiveValue =~ s/"//g;
-                $directiveValue =~ s/^\s+//;
-                $directiveValue =~ s/\s+$//;
-                
-                if($temp eq $dirValue)
-                {
-                    if($numPass)
-                    {
-                        $files = $temp;
-                        $directiveValue =~ s/^\s+//;
-                        $directiveValue =~ s/\s+$//;
-                        ++$filecount;
-                        $files[$filecount][SITENAME] = $array[$rowCount][SITENAME];
-                        $files[$filecount][DOCUMENTROOT] = $array[$rowCount][DOCUMENTROOT];
-                        $files[$filecount][FILESMATCH] = $files;
-                        $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                        $files[$filecount][HOSTNAMELOOKUPS] = "Off";
-                        $files[$filecount][IDENTITYCHECK] = "Off";
-                        $files[$filecount][ALLOWOVERRIDE] = "All";
-                        
-                        while (&pars_getNextDirective() == 1)
-                        {
-                            if($directiveName eq "/Files")
-                            {
-                                last;
-                            }
-                            if($directiveName eq "Options")
-                            {
-                                #Equivalent IIS tag => AccessExecute
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][OPTIONS] = $files[$filecount][OPTIONS] . $directiveValue . " ";
-                            }
-                            if($directiveName eq "Order")
-                            {
-                                #Equivalent IIS tag => Not applicable
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][ORDER] = $directiveValue;
-                            }
-                            if($directiveName eq "AddEncoding")
-                            {
-                                #Equivalent IIS tag => MimeMap
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][ADDENCODING] = $files[$filecount][ADDENCODING] . $directiveValue . "|";
-                            }
-                            if($directiveName eq "AddType")
-                            {
-                                #Equivalent IIS tag => MimeMap
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $directiveValue . "|";
-                            }
-                            if($directiveName eq "AuthName")
-                            {
-                                #Equivalent IIS tag => Not Applicable
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][AUTHNAME] = $directiveValue;
-                            }
-                            if($directiveName eq "AuthType")
-                            {
-                                #Equivalent IIS tag => Not Applicable
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][AUTHTYPE] = $directiveValue;
-                            }
-                            if($directiveName eq "AuthUserFile")
-                            {
-                                #Equivalent IIS tag => Not Applicable
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                if($directiveValue =~ /^\//)
-                                {
-                                    $files[$filecount][AUTHUSERFILE] = $directiveValue;
-                                }
-                                else
-                                {                                        
-                                    $files[$filecount][AUTHUSERFILE] = $arrayDir[0][SERVERROOT] . $directiveValue;
-                                }                                    
-                            }
-                            if($directiveName eq "AuthGroupFile")
-                            {
-                                #Equivalent IIS tag => Not Applicable
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                if($directiveValue =~ /^\//)
-                                {
-                                    $files[$filecount][AUTHGROUPFILE] = $directiveValue;                                        
-                                }
-                                else
-                                {                                        
-                                    $files[$filecount][AUTHGROUPFILE] = $array[0][SERVERROOT] . $directiveValue;
-                                }
-                            }
-                            if($directiveName eq "DefaultType")
-                            {
-                                #Equivalent IIS tag => MimeMap
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                
-                                my $temp = $directiveValue . " " . ".*";
-                                $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $temp . "|";
-                            }
-                            if($directiveName eq "Deny")
-                            {
-                                #Equivalent IIS tag => MimeMap
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][DENY] = $directiveValue;
-                            }
-                            if($directiveName eq "DirectoryIndex")
-                            {
-                                #Equivalent IIS tag => EnableDirBrowsing;
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][DIRECTORYINDEX] = $directiveValue;
-                                $files[$filecount][DIRECTORYINDEX] =~ s/ /,/g;
-                            }
-                            if($directiveName eq "ErrorDocument")
-                            {
-                                #Equivalent IIS tag => HttpErrors
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][ERRORDOCUMENT] = $files[$filecount][ERRORDOCUMENT] . $directiveValue . " ";
-                            }
-                            if($directiveName eq "ExpiresActive")
-                            {
-                                #Equivalent IIS tag => HttpExpires
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][EXPIRESACTIVE] = $directiveValue;
-                            }
-                            if($directiveName eq "HostnameLookups")
-                            {
-                                #Equivalent IIS tag => EnableReverseDNS
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][HOSTNAMELOOKUPS] = $directiveValue;
-                            }
-                            if($directiveName eq "IdentityCheck")
-                            {
-                                #Equivalent IIS tag => LogExtFileUserName
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][IDENTITYCHECK] = $directiveValue;
-                            }
-                            if($directiveName eq "AllowOverride")
-                            {
-                                #Equivalent IIS tag => Not Applicable.
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][ALLOWOVERRIDE] = $directiveValue;
-                            }
-                            if($directiveName eq "Header")
-                            {
-                                #Equivalent IIS tag => HttpCustomHeaders
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $directiveValue =~ s/"//g;
-                                if($directiveValue =~ /^set/)
-                                {
-                                    $files[$filecount][HEADER] = $files[$filecount][HEADER] . $directiveValue . "|" ;
-                                }
-                            }
-                            if($directiveName eq "ExpiresActive")
-                            {       
-                                #Equivalent IIS tag => HttpExpires
-                                $directiveValue =~ s/^\s+//;
-                                $directiveValue =~ s/\s+$//;
-                                $files[$filecount][EXPIRESACTIVE] = $directiveValue;
-                            }
-                        }
-                        
-                        $numPass = 0;   
-                    }
-                    else
-                    {
-                        my $kk = 0;
-                        my $jj = 0;
-                        ++$filecount;
-                        
-                        for($kk = 0; $kk < $maxColumn;$kk++)
-                        {
-                            $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                        }
-                        
-                        $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                    }
-                }
-                $indI++;
-            }
-        }
-    }
-    if($directiveName eq "FilesMatch")
-    {
-        my @file;
-        my $fileList;
-        my @fileEntire;
-        my $temp;
-        my $counter = 0;
-        my @Listing;
-        my $singleEntry;
-        my @fileEntire;
-        my @filePath;
-        my $singleEntry;
-        my $count = 0;
-        my $files;
-        my @tempArray;
-        my $numPass = 1;
-        
-        @Listing = pars_GetDirlistinght("$array[$rowCount][DOCUMENTROOT]");
-        my $rootDir;
-        $rootDir = $array[$rowCount][DOCUMENTROOT];
-        foreach $singleEntry (@Listing)
-        {
-            
-            if($singleEntry =~ /:$/)
-            {
-                #Dont do anything
-                $singleEntry =~ s/:$//;
-                $rootDir = $singleEntry;
-                chomp($rootDir);
-                
-            }
-            elsif($singleEntry =~ /^total/)
-            {                    
-                #Dont do anything                    
-            }
-            elsif($singleEntry =~ /^d/)
-            {
-                #Dont do anything                    
-            }
-            elsif($singleEntry eq "")
-            {                   
-                #Dont do anything                    
-            }
-            else
-            {
-                $fileEntire[$count] = pars_FileNameSet($singleEntry);
-                $filePath[$count] = $rootDir;
-                $count++;
-            }
-        }
-        my $indI = 0;
-        my $dirValue = $directiveValue;
-        foreach $temp (@fileEntire)
-        {
-            $directiveValue =~ s/"//g;
-            $directiveValue =~ s/^\s+//;
-            $directiveValue =~ s/\s+$//;        
-            if($temp =~ /$dirValue/)
-            {
-                if($numPass)
-                {
-                    $files = $temp;
-                    $directiveValue =~ s/^\s+//;
-                    $directiveValue =~ s/\s+$//;
-                    ++$filecount;
-                    $files[$filecount][SITENAME] = $array[$rowCount][SITENAME];
-                    $files[$filecount][DOCUMENTROOT] = $array[$rowCount][DOCUMENTROOT];
-                    $files[$filecount][FILESMATCH] = $files;
-                    $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                    $files[$filecount][HOSTNAMELOOKUPS] = "Off";
-                    $files[$filecount][IDENTITYCHECK] = "Off";
-                    $files[$filecount][ALLOWOVERRIDE] = "All";
-                    while (&pars_getNextDirective() == 1)
-                    {
-                        if($directiveName eq "/FilesMatch")
-                        {
-                            last;
-                        }
-                        if($fileMatch)
-                        {
-                            if($directiveName eq "/Files")
-                            {
-                                
-                                $fileMatch = 0;
-                                last;
-                            }
-                        }
-                        if($directiveName eq "Options")
-                        {
-                            #Equivalent IIS tag => AccessExecute
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][OPTIONS] = $files[$filecount][OPTIONS] . $directiveValue . " ";
-                        }
-                        if($directiveName eq "Order")
-                        {
-                            #Equivalent IIS tag => Not applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][ORDER] = $directiveValue;
-                        }
-                        if($directiveName eq "AddEncoding")
-                        {
-                            #Equivalent IIS tag => MimeMap
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][ADDENCODING] = $files[$filecount][ADDENCODING] . $directiveValue . "|";
-                        }
-                        if($directiveName eq "AddType")
-                        {
-                            #Equivalent IIS tag => MimeMap
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $directiveValue . "|";
-                        }
-                        if($directiveName eq "AuthName")
-                        {
-                            #Equivalent IIS tag => Not Applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][AUTHNAME] = $directiveValue;
-                        }
-                        if($directiveName eq "AuthType")
-                        {
-                            #Equivalent IIS tag => Not Applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][AUTHTYPE] = $directiveValue;
-                        }
-                        if($directiveName eq "AuthUserFile")
-                        {
-                            #Equivalent IIS tag => Not Applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            if($directiveValue =~ /^\//)
-                            {
-                                $files[$filecount][AUTHUSERFILE] = $directiveValue;
-                            }
-                            else
-                            {                                    
-                                $files[$filecount][AUTHUSERFILE] = $arrayDir[0][SERVERROOT] . $directiveValue;
-                            }                                
-                        }
-                        if($directiveName eq "AuthGroupFile")
-                        {
-                            #Equivalent IIS tag => Not Applicable
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            if($directiveValue =~ /^\//)
-                            {
-                                $files[$filecount][AUTHGROUPFILE] = $directiveValue;                                    
-                            }
-                            else
-                            {                                    
-                                $files[$filecount][AUTHGROUPFILE] = $array[0][SERVERROOT] . $directiveValue;
-                            }
-                        }
-                        if($directiveName eq "DefaultType")
-                        {
-                            #Equivalent IIS tag => MimeMap
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            
-                            my $temp = $directiveValue . " " . ".*";
-                            $files[$filecount][ADDTYPE] = $files[$filecount][ADDTYPE] . $temp . "|";
-                        }
-                        if($directiveName eq "Deny")
-                        {
-                            #Equivalent IIS tag => MimeMap
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][DENY] = $directiveValue;
-                        }
-                        if($directiveName eq "DirectoryIndex")
-                        {
-                            #Equivalent IIS tag => EnableDirBrowsing;
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][DIRECTORYINDEX] = $directiveValue;
-                            $files[$filecount][DIRECTORYINDEX] =~ s/ /,/g;
-                        }
-                        if($directiveName eq "ErrorDocument")
-                        {
-                            #Equivalent IIS tag => HttpErrors
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][ERRORDOCUMENT] = $files[$filecount][ERRORDOCUMENT] . $directiveValue . " ";
-                        }
-                        if($directiveName eq "ExpiresActive")
-                        {
-                            #Equivalent IIS tag => HttpExpires
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][EXPIRESACTIVE] = $directiveValue;
-                        }
-                        if($directiveName eq "HostnameLookups")
-                        {
-                            #Equivalent IIS tag => EnableReverseDNS
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][HOSTNAMELOOKUPS] = $directiveValue;
-                        }
-                        if($directiveName eq "IdentityCheck")
-                        {
-                            #Equivalent IIS tag => LogExtFileUserName
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][IDENTITYCHECK] = $directiveValue;
-                        }
-                        if($directiveName eq "AllowOverride")
-                        {
-                            #Equivalent IIS tag => Not Applicable.
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][ALLOWOVERRIDE] = $directiveValue;
-                        }
-                        if($directiveName eq "Header")
-                        {
-                            #Equivalent IIS tag => HttpCustomHeaders
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $directiveValue =~ s/"//g;
-                            if($directiveValue =~ /^set/)
-                            {
-                                $files[$filecount][HEADER] = $files[$filecount][HEADER] . $directiveValue . "|" ;
-                            }
-                        }
-                        if($directiveName eq "ExpiresActive")
-                        {   
-                            #Equivalent IIS tag => HttpExpires
-                            $directiveValue =~ s/^\s+//;
-                            $directiveValue =~ s/\s+$//;
-                            $files[$filecount][EXPIRESACTIVE] = $directiveValue;
-                        }
-                    }
-                    $numPass = 0;
-                }
-                else
-                {
-                    my $kk = 0;
-                    my $jj = 0;
-                    ++$filecount;
-                    
-                    for($kk = 0; $kk < $maxColumn;$kk++)
-                    {
-                        $files[$filecount][$kk] = $files[($filecount-1)][$kk];
-                    }
-                    
-                    $files[$filecount][DIRECTORY] =  $filePath[$indI];
-                    $files[$filecount][FILESMATCH] = $temp;
-                }
-            }
-            $indI++;
-        }
-    }    
+    if ($DEBUG_MODE) { ilog_print(1,"\n-----------------------------------------------------"); }
 }
 
 #######################################################################################################################
@@ -4079,6 +1454,7 @@ sub pars_common2d
 #######################################################################################################################
 sub pars_setDefaultsite
 {
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: pars_setDefaultsite \n"); }
     # $defaultUserdir -> virtUserdir
     # Parse for Include directive
     if($directiveName eq "Include")
@@ -4194,7 +1570,7 @@ sub pars_setDefaultsite
                     {
                         # log 'file close error' and continue                       
                         ilog_setLogInformation('INT_ERROR',$configFile,ERR_FILE_CLOSE,__LINE__);
-                    }   
+                    }
                 }
                 else
                 {
@@ -4360,6 +1736,10 @@ sub pars_setVirtualhost
     $array[$rowCount][ACCESSCONFIG] = "conf/access.conf";
     $array[$rowCount][ACCESSFILENAME] = ".htaccess";
     $array[$rowCount][DEFAULTTYPE] = "text/plain";
+    
+    my $odr = $array[0][DOCUMENTROOT];
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: munging array: array[0][DOCUMENTROOT]: $odr \n"); }
+    if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: rowCount: $rowCount \n"); }
     if (-e ("/usr/local/apache/htdocs"))
     {
         # old style apache
@@ -4389,6 +1769,8 @@ sub pars_setVirtualhost
     my $resourceFlag = 1;
     while (&pars_getNextDirective() == 1)
     {
+        if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: ===================start==================\n"); }
+        if ($DEBUG_MODE) { ilog_print(1,"DEBUG: while pars_getNextDirective() == 1 [directiveName]: [$directiveName]\n"); }
         if($directiveName eq "/VirtualHost")
         {
             last;
@@ -4418,7 +1800,8 @@ sub pars_setVirtualhost
             $array[$rowCount][OPTIONS] = $directiveValue;
         }
 
-        pars_common2d();   
+        pars_common2d();
+        if ($DEBUG_MODE) { ilog_print(1,"DEBUG: ======================end===============\n"); }
     }
     
     if($errorFlag)
@@ -4433,6 +1816,7 @@ sub pars_setVirtualhost
     {
         $array[$rowCount][ACCESSCONFIG] = $array[$rowCount][SERVERROOT] . $array[$rowCount][ACCESSCONFIG];
     }
+    if ($DEBUG_MODE) { ilog_print(1,"DEBUG: pars_setVirtualhost complete \n"); }
 }
 
 #######################################################################################################################
@@ -4730,7 +2114,7 @@ sub pars_siteHasValidFrameworkDb
     {
         return;
     }    
-    my $workingFolder = &utf_getWorkingFolder();    
+    
     my $dbName;
     my $dbUser;
     my $dbPassword;
@@ -4869,7 +2253,6 @@ sub pars_logSiteToRecoveryFile
     # mySQL 
     $strRecoveryInfo  .=  "\nMySQL=".( ($array[$sIndex][MYSQL]) ? "yes" : "no" );
     $strRecoveryInfo  .=  "\nFramework=".$array[$sIndex][FRAMEWORK];
-    my $strSessionName = &ilog_getSessionName();
     ilog_setLogInformation("REC_INFO","",$strRecoveryInfo,"","",$strSessionName);
 }
 
@@ -5034,10 +2417,14 @@ sub pars_getNextDirective
     {
         chomp($lineContent);
         $lineContent =~ s/^\s+//;
+        # replace carriage returns and newlines
+        $lineContent =~ s/\R//g;
+        $lineContent =~ s/\n//g;
         if($lineContent ne "")
         {
             if($lineContent !~ /^#/)
             {
+if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: lineContent: [$lineContent]\n"); }
                 if($lineContent =~ /</)
                 {
                     $lineContent =~ s/<//;
