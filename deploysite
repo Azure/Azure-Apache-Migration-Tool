@@ -1,0 +1,4 @@
+#!/bin/bash
+cd $1/aamt
+export TERM=xterm > /dev/null
+perl -I $1/aamt/ -I $1/aamt/lib -I $1/aamt/xml aamt.pl -d $2 $3 $1/aamt/$4 2>&1

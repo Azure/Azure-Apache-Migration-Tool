@@ -746,16 +746,12 @@ sub pars_PublishSite
         {
 	    my $findit=0;
 
-	    if(&utf_getRunMode eq 'deploy')
+            my $key = $entry->{originalsitename};
+	    if(!$key)
 	    {
-	        my $key = $entry->{publishMethod};
-	        $findit=1 if($key eq "MSDeploy");
+	        $key = $entry->{originalsitename} = $rComputername.":".$strSiteName;
 	    }
-	    else
-	    {
-                my $key = $entry->{originalsitename};
-                $findit=1 if ($key eq $rComputername.":".$strSiteName);
-	    }
+            $findit=1 if ($key eq $rComputername.":".$strSiteName);
 
 	    if($findit)
             {
@@ -976,14 +972,14 @@ sub pars_PublishSite
                 if ($returnCode != 0 && $retries < 5)
                 {
                     ilog_print(1,"\nreturncode: $returnCode\n");
-		    ilog_print(1,"mysqldump --single-transaction -h $dbHost -u $dbUser -p'dbPass' $dbName > workingFolder/mysqldump.sql\n"); 
+		    ilog_print(1,"mysqldump --single-transaction -h $dbHost -u $dbUser -p'dbPass' $dbName > $workingFolder/mysqldump.sql\n"); 
                     sleep 1;
                 }
             }
 
             # RESTORE SQL
             ilog_print(1,"\nMoving database to: $rServer...\n");
-	    ilog_print(1, "mysql -u $rUsername -h $rServer -p'rPassword' $rDatabase < workingFolder/mysqldump.sql\n\n");	
+	    ilog_print(1, "mysql -u $rUsername -h $rServer -p'rPassword' $rDatabase < $workingFolder/mysqldump.sql\n\n");	
             `mysql -u $rUsername -h $rServer -p'$rPassword' $rDatabase < $workingFolder/mysqldump.sql`;
             $returnCode = $?;
             if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: returncode: $returnCode\n"); }
@@ -991,8 +987,7 @@ sub pars_PublishSite
             {
                 ilog_print(1,"\nMoving failed with return code: $returnCode\n");                
                 $strYesOrNo =" ";
-	        ilog_print(1, "mysql -u $rUsername -h $rServer -p'rPassword' $rDatabase < workingFolder/mysqldump.sql\n");	
-		ilog_print(1,"\nplease check and try moving databsae manually...\n");
+	        ilog_print(1, "mysql -u $rUsername -h $rServer -p'rPassword' $rDatabase < $workingFolder/mysqldump.sql\n");	
 		if(&utf_getRunMode() eq 'interactive'){
                    while($strYesOrNo!~/^\s*[YynN]\s*$/)
                    {
@@ -1003,6 +998,7 @@ sub pars_PublishSite
                    }
 		}
 		else{
+			 ilog_print(1,"\nplease check and try moving databsae manually...\n");
 		         chomp($strYesOrNo='n ');
 		}
                 
