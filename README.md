@@ -6,9 +6,9 @@ The Azure Apache Migration Migration Tool is a tool that allows customers to mov
 Make sure that all prerequisites are installed, and then run:
 
 ```
-wget http://www.movemetothecloud.net/Azure-Apache-Migration-Tool.tar.gz
-tar -xvzf Azure-Apache-Migration-Tool.tar.gz
-cd Azure-Apache-Migration-Tool
+wget https://github.com/Azure/Azure-Apache-Migration-Tool/archive/master.zip
+unzip master.zip
+cd Azure-Apache-Migration-Tool-master
 ```
 
 ## Running the tool
@@ -48,6 +48,9 @@ perl LWP HTTPS can be installed with zypper:
 ```
 sudo zypper install perl-LWP-Protocol-https
 ```
+
+### Fedora/RHEL
+sudo yum install perl-LWP-Protocol-https
 
 ## How does it work?
 The tool parses the main Apache configuration file, detects all sites and their root directories.
