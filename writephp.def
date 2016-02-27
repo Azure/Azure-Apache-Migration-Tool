@@ -1,4 +1,5 @@
 Wordpress=write_wp.php
 Drupal=write_drupal.php
+Drupal7=write_drupal.php
 Joomla=write_joomla.php
 Discuz3+UC=write_dzuc.php

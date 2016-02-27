@@ -1,4 +1,5 @@
 Wordpress=read_wp_settings.php
 Drupal=read_drupal_settings.php
+Drupal7=read_drupal_settings.php
 Joomla=read_joomla_settings.php
 Discuz3+UC=read_dzuc_settings.php

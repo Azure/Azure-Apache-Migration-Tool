@@ -13,7 +13,7 @@ $lineMatch = "define.*'DB_NAME'|define.*'DB_USER'|define.*'DB_PASSWORD'|define.*
 fwrite($fh, "$lineMatch\n");
 $lineNotMatch = "qr/define\s*\(\s*'WP_CONTENT_DIR',\s*ABSPATH\s*.\s*'wp-content'\s*\)/";
 fwrite($fh, "$lineNotMatch\n");
-$settingsLine = "define('DB_NAME', '$rDatabase');\ndefine('DB_USER', '$rUsername');\ndefine('DB_PASSWORD', '$rPassword');\ndefine('DB_HOST', '$rServer');\ndefine('WP_HOME','${rTargetUrl}'); \ndefine('WP_SITEURL','${rTargetUrl}');\n";
+$settingsLine = "define('DB_NAME', '$rDatabase');\ndefine('DB_USER', '$rUsername');\ndefine('DB_PASSWORD', '$rPassword');\ndefine('DB_HOST', '$rServer');\ndefine('WP_HOME','${rTargetUrl}'); \ndefine('WP_SITEURL','${rTargetUrl}');\ndefine('WP_CONTENT_DIR', ABSPATH.'wp-content');\n";
 fwrite($fh,"$settingsLine");
 
 fclose($fh);
