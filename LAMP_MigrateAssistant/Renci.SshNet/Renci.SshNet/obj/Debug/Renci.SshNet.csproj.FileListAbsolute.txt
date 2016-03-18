@@ -1,0 +1,5 @@
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\bin\Debug\Renci.SshNet.xml
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\bin\Debug\Renci.SshNet.dll
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\bin\Debug\Renci.SshNet.pdb
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\obj\Debug\Renci.SshNet.dll
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\obj\Debug\Renci.SshNet.pdb

@@ -1,0 +1,4 @@
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\bin\Release\Renci.SshNet.xml
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\bin\Release\Renci.SshNet.dll
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\obj\Release\Renci.SshNet.csprojResolveAssemblyReference.cache
+C:\tmp\test\LAMP_MigrateAssistant\Renci.SshNet\Renci.SshNet\obj\Release\Renci.SshNet.dll
