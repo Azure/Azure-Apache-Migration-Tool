@@ -50,7 +50,9 @@ sudo zypper install perl-LWP-Protocol-https
 ```
 
 ### Fedora/RHEL
+```
 sudo yum install perl-LWP-Protocol-https
+```
 
 ## How does it work?
 The tool parses the main Apache configuration file, detects all sites and their root directories.
