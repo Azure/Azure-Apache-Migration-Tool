@@ -1,4 +1,5 @@
-use strict;
+#! /usr/bin/env perl
+
 # package used to get the current working folder
 use aamt_wrkFolder;
 my $currentLibfolder;
@@ -40,7 +41,7 @@ eval
 {    
     my $auqRetVal;
     ($auqRetVal,$localConfFilePath) = auth_main();        # AUQ module functionality    
-    if(!($auqRetVal))
+    unless ($auqRetVal)
     {
         &DeleteWorkingFolder();
 	    die CLEANUP_AND_EXIT;
@@ -72,10 +73,10 @@ eval
         my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
         # change local dir
         my $retwrk_changeLocalDir = wrk_changeLocalDir($workingFolder);
-        if (!($retwrk_changeLocalDir))
+        unless($retwrk_changeLocalDir)
         {
             $logFileReturn= ilog_setLogInformation('EXT_ERROR',ERR_CWD_COMMAND,'', __LINE__);
-            if(!($logFileReturn))
+            unless($logFileReturn)
             {	
                 $logFileReturn=ilog_print(ERR_INTERNAL_ERROR_CONSOLE.__LINE__,1);
             }
@@ -105,7 +106,7 @@ eval
 
         my $confAllName = &utf_getCompleteFilePath(FILE_CONF_ALL);
         my $HANDLE_CONF_ALL = new IO::File;
-        if(open(HANDLE_CONF_ALL,">> $confAllName") or die 'ERR_FILE_OPEN')
+        if(open(HANDLE_CONF_ALL,">>", $confAllName) or die ERR_FILE_OPEN)
         {
             print HANDLE_CONF_ALL $concatenated;
             close(HANDLE_CONF_ALL); 
@@ -128,14 +129,11 @@ eval
     &DeleteWorkingFolder();
     &TerminateTool();
 };
-if($@)
+if ($@ and $@ !~ /EXIT_TOOL_NOW/)
 {
-    if ($@ !~ /EXIT_TOOL_NOW/)
-    {        
-        # Abnormal Termination ... 
-        print "$@";
-        &DeleteWorkingFolder();
-    }
+    # Abnormal Termination ...
+    print "$@";
+    &DeleteWorkingFolder();
 }
 # end of main subroutine
 
