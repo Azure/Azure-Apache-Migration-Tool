@@ -15,8 +15,7 @@ sub main_getCurrentLibFolder
     {        
         
         $fileName = "./".FILE_PERLPRESENT;
-        eval{open(FH,"<$fileName") or die ERR_FILE_OPEN;};
-        if($@ =~ ERR_FILE_OPEN)
+        unless(open my $fh, "<", $fileName)
         { 
             system('cls');
             print "For correct operation of the Kit, it needs to be run from WSMK.BAT file\n";
@@ -69,16 +68,8 @@ sub main_validatePerlVersion
 #-------------------------------------------------------------------------------
 sub main_dispIncorrectPerl
 {
-    if($^O eq WINDOWS)                                                  
-    {        
-        system('cls');
-        print ERR_INCORRECT_PERL_VERSION;
-    }
-    else
-    {
-        system("clear");
-        print ERR_INCORRECT_PERL_VERSION;
-    }
+    ($^O eq WINDOWS) ? system('cls') : system('clear');
+    print ERR_INCORRECT_PERL_VERSION;
 }
 
 #-----------------------------------------------------------------------------------------------
