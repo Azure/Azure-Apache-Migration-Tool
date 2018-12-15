@@ -69,7 +69,7 @@ eval
         # get session name
         my $strSessionName = &ilog_getSessionName();
         # form the complete working folder
-        my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+        my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
         # change local dir
         my $retwrk_changeLocalDir = wrk_changeLocalDir($workingFolder);
         if (!($retwrk_changeLocalDir))
@@ -157,7 +157,7 @@ my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
 #get session name
 my $strSessionName = &ilog_getSessionName();
 #form the complete working folder
-my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
 
     while($strYesOrNo!~/^\s*[YynN]\s*$/)
     {

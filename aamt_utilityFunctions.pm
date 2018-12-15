@@ -280,7 +280,7 @@ sub utf_getWorkingFolder
     #get session name
     my $strSessionName = &ilog_getSessionName();
     #form the complete working folder
-    my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+    my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
     
     return $workingFolder;
 }

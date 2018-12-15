@@ -71,7 +71,7 @@ my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
 #get session name
 my $strSessionName = &ilog_getSessionName();
 #form the complete working folder
-my $workingFolder = $strCurWorkingFolder . '/.sessions/' . $strSessionName;
+my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
 
 #----------------------------------------------------------------------------------------------------------------------
 $siteIndex[0]  = 'SITENAME';
@@ -409,7 +409,7 @@ sub pars_UploadPublishSettingsAllSites
         ilog_setLogInformation('INT_INFO',$recoveryFile,MSG_FILE_CLOSE,'');
     }
 
-    ilog_print(1,"\nThanks for using the Apache to Azure App Service Migration Tool! \n");
+    ilog_print(1, dTITLE_EXIT);
     return 0; 
 }
 
@@ -454,7 +454,7 @@ sub pars_PublishSite
     my $mySqlConnectionString;
          my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
      my $strSessionName = &ilog_getSessionName();
-     my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+     my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
 
     while (!$publishSuccess)
     {
@@ -761,7 +761,7 @@ sub getConfigFiles
     my $lineNotMatch = $_[2];
          my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
      my $strSessionName = &ilog_getSessionName();
-     my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+     my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
 
     my @files = @{$_[3]};
 
@@ -895,7 +895,7 @@ sub deployToSite
 
      my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
      my $strSessionName = &ilog_getSessionName();
-     my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+     my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
     my $zipLocation = "$workingFolder/site-content.zip";
     if ( $zip->writeToFileNamed($zipLocation) != AZ_OK ) 
     {
@@ -2178,7 +2178,7 @@ sub pars_siteHasValidFrameworkDb
     my $dbHost;    
     my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
     my $strSessionName = &ilog_getSessionName();
-    my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+    my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
 
     if ($framework eq WORDPRESS)
     {

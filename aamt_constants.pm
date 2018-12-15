@@ -28,8 +28,8 @@ use constant REDHAT2                        =>                      "Redhat";
 use constant MANDRAKE                       =>                      "Mandrake";
 use constant APACHE                         =>                      "Apache";   
 use constant PROTOCOL                       =>                      "tcp";
-use constant TITLE1							=>						" \t\tApache to Azure App Service Migration Tool\t\n";
-use constant TITLE2							=>						"\t\tCopyright MICROSOFT CORPORATION Version 1.0 \t\n";
+use constant TITLE1							=>						" \t\tApache to Azure App Service Apache Migration Tool\t\n";
+use constant TITLE2							=>						"\t\tCopyright MICROSOFT CORPORATION Version 1.1 \t\n";
 use constant TITLE3							=>						
 
 "
@@ -42,7 +42,11 @@ System Requirements:
     2. Administrative knowledge of the running Website(s)
        (e.g.:httpd.conf file path) 
 
-More Information:  Visit http://www.movemetothecloud.net/
+More Information:  Visit http://www.movemetothecloud.net/LinuxMigration
+
+Remember to periodically update the tool from the above site.
+
+For support please open a ticket at :  https://github.com/Azure/Azure-Apache-Migration-Tool/issues
 
 Important Notes:
     Super User rights are required to use the Apache to Azure App Service Migration Tool.\n";	  
@@ -57,7 +61,15 @@ use constant TITLE_SESSION_NAME				 =>
     store temporary files which may contain sensitive information and 
     should be deleted when this tool is finished running.";
 
-use constant TITLE_EXIT                      =>  "\n\nThank You for using Apache to Azure App Service Migration Tool\n";
+use constant TITLE_EXIT                      =>  "\n\n
+---------------------------------------------------------------------------
+For more information:  Visit http://www.movemetothecloud.net/LinuxMigration\n
+
+Remember to periodically update the tool from the above site.\n
+
+For support please open a ticket at :  https://github.com/Azure/Azure-Apache-Migration-Tool/issues\n
+Thank You for using Apache to Azure App Service Migration Tool\n
+---------------------------------------------------------------------------\n\n";
 use constant SUCCESS						=>						"1000";
 
 #*****************************************************************************#
@@ -470,7 +482,7 @@ use constant RECOVERY_MODE_1    => "WSMKREC1";
 use constant RECOVERY_MODE_2    => "WSMKREC2";
 use constant RECOVERY_MODE_3    => "WSMKREC3";
 use constant RECOVERY_MODE_COMPLETE => "WSMKREC3";
-use constant TASKLIST_DELIM		=>  "|"; # old value"²"; 
+use constant TASKLIST_DELIM		=>  "|"; # old value"ï¿½"; 
 use constant L_TIME_LAPSE		=> 30;
 use constant CLEANUP_AND_EXIT  =>  "EXIT_TOOL_NOW";
 use constant MIME_TYPES_FILE	=>  "mime.types";
