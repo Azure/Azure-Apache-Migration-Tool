@@ -69,7 +69,7 @@ eval
         # get session name
         my $strSessionName = &ilog_getSessionName();
         # form the complete working folder
-        my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+        my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
         # change local dir
         my $retwrk_changeLocalDir = wrk_changeLocalDir($workingFolder);
         if (!($retwrk_changeLocalDir))
@@ -151,15 +151,24 @@ sub TerminateTool
 sub DeleteWorkingFolder
 {
     my $strYesOrNo = "";
+    
+# get the current working folder
+my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+#get session name
+my $strSessionName = &ilog_getSessionName();
+#form the complete working folder
+my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+
     while($strYesOrNo!~/^\s*[YynN]\s*$/)
     {
-        ilog_printf(1, "    Would you like to delete the working folder used to store temporary settings? (Y/N):");
+        ilog_printf(1, "    Would you like to delete the working folder $workingFolder used to store temporary settings? (Y/N):");
         chomp($strYesOrNo = <STDIN>);
         ilog_print(0,ERR_INVALID_INPUT.ERR_ONLY_YES_OR_NO)
             if ($strYesOrNo!~/^\s*[YynN]\s*$/);
+            
         if ($strYesOrNo=~/^\s*[Yy]\s*$/)
         {
-            rmtree([&utf_getCurrentWorkingFolder()]);
+            rmtree([$workingFolder]);
         }
     }
 }

@@ -71,7 +71,7 @@ my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
 #get session name
 my $strSessionName = &ilog_getSessionName();
 #form the complete working folder
-my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+my $workingFolder = $strCurWorkingFolder . '/.sessions/' . $strSessionName;
 
 #----------------------------------------------------------------------------------------------------------------------
 $siteIndex[0]  = 'SITENAME';
@@ -323,8 +323,8 @@ sub pars_CreateReadinessReport
             }            
         }
 
-        ilog_print(1,"\nReadiness report uploaded, to continue navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
-        
+        ilog_print(1,"\nReadiness report uploaded, to view it navigate to:\n ${SITE_URL}/results/index/$guid\n\nCreate site and databases and then download and save the publish settings file to this computer.");
+        ilog_print(1,"\n Please create the resources using https://aka.ms/webappmysql  and then download publishing profile from the web app blade in portal to proceed \n");
         # write the readiness report to a file
         my $outFile = "$workingFolder/readinessreport.json";
         open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
@@ -452,14 +452,23 @@ sub pars_PublishSite
     my $userName;
     my $userPWD;
     my $mySqlConnectionString;
+         my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+     my $strSessionName = &ilog_getSessionName();
+     my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+
     while (!$publishSuccess)
     {
+         if ($DEBUG_MODE) { ilog_print(1,"\nDEBUG: strPublishSettings: $strPublishSettings \n"); }
+
         my $xml = XML::Simple->new;
         my $data = $xml->XMLin($strPublishSettings, ForceArray => ['publishProfile']);
+
         for my $entry (@{$data->{publishProfile}})
         {
-            my $key = $entry->{originalsitename};
-            if ($key eq $rComputername.":".$strSiteName)
+
+            my $key = $entry->{publishMethod};
+
+            if ( index($key,"MSDeploy")!=-1 )#  $rComputername.":".$strSiteName)
             {
                 $publishUrl = $entry->{publishUrl};
                 $userName = $entry->{userName};
@@ -470,10 +479,10 @@ sub pars_PublishSite
                 {
                     $mySqlConnectionString = $dbs->{add}->{connectionString};                    
                 }
-                
                 last;
             }
         }
+        ilog_print(1,"Calling deployToSite with : $publishUrl, $documentRoot, $userName, $userPWD");            
         
         my $rCode = &deployToSite($publishUrl, $documentRoot, $userName, $userPWD, TRUE);
         if ($rCode !~ /^\s*2[0-9]*/)
@@ -559,8 +568,8 @@ sub pars_PublishSite
             }
             elsif ($framework eq DRUPAL)
             {
-                # TODO: improve drupal detection logic
-                $lineMatch = qr/databases.*'default'.*'default'/;
+                # TODO: improve drupal detection logic qr/databases.*'default'.*'default'\s*\$databases
+                $lineMatch = qr/databases.*'default'.*'default'|\$databases/;
                 $settingsLine = "\$databases['default']['default']=array('driver'=>'mysql','database' =>'$rDatabase','username'=>'$rUsername','password'=>'$rPassword','host'=>'$rServer','port' => '','prefix' => '');\n";
             }
             elsif ($framework eq JOOMLA)
@@ -597,12 +606,31 @@ sub pars_PublishSite
                 $outFile =~ s/_copy//g;
                 open my $out, '>', $outFile or die "Can't write to $outFile file: $!";
                 my $openBracket = FALSE;
+                my $commentLine = FALSE;
                 while (my $line = <$fh>)
                 {
-                    if ($line =~ $lineMatch && ($lineNotMatch eq "" || $line !~ $lineNotMatch))
+                    my $trim = trim($line) ;
+                    #$trim =~ s/^\s+|\s+$//g; 
+                    
+                    if(begins_with($trim, "*")|| begins_with($trim, "/*") || begins_with($trim, "//") || ends_with($trim, "*/"))
+                    #if ($line =~ /\*(?:.|[\r\n])*?\*/ )
+                    {
+                        $commentLine = TRUE;   
+                    }
+                    else
+                    {
+                        $commentLine = FALSE;   
+                    }
+                    #if ($DEBUG_MODE) 
+                    #{ ilog_print(1,"\ncommentline:$commentLine \n$line$trim"); }
+
+                    if (!$commentLine)
+                    {
+                        if ($line =~ $lineMatch && ($lineNotMatch eq "" || $line !~ $lineNotMatch))
                     {
                         if (!$settingsInserted)
                         {
+                            print $out "// SETTING INSERTED BY AZURE APP SERVICE MIGRATION TOOL:\n";
                             print $out $settingsLine;
                             $settingsInserted = TRUE;
                             print $out "// COMMENTED OUT BY AZURE APP SERVICE MIGRATION TOOL: $line";
@@ -619,7 +647,11 @@ sub pars_PublishSite
                     {
                         print $out $line;
                     }
-                    
+                    }
+                    else
+                    {
+                        print $out $line;
+                    }
                     if ($openBracket && $line =~ ';')
                     {
                         $openBracket = FALSE;
@@ -698,14 +730,39 @@ sub pars_PublishSite
         }
     }
 }
+sub trim
+{
+    my $s =shift; $s =~ s/^\s+|\s+$//g; 
+    return $s;
+}
+sub begins_with
+{
+ return (index($_[0],$_[1]) == 0)  ; 
+ #return substr($_[0], length($_[1])) eq $_[1];    
+}
 
+sub ends_with
+{
+#     return (index($_[0],$_[1]) ==1)  ; 
+if (length($_[0])<length($_[1]))
+{
+return FALSE;
+}
+else 
+{
+    return substr($_[0], length($_[0])-length($_[1])) eq $_[1]; 
+}   
+}
 sub getConfigFiles
 {
     
     my $documentRoot = $_[0];
     my $lineMatch = $_[1];
     my $lineNotMatch = $_[2];
-    # my $workingFolder = $_[3];
+         my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+     my $strSessionName = &ilog_getSessionName();
+     my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+
     my @files = @{$_[3]};
 
     for my $phpFile (@files)
@@ -836,9 +893,9 @@ sub deployToSite
         $zip->addFile($itemToAdd, $filename);
     }
 
-    # my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
-    # my $strSessionName = &ilog_getSessionName();
-    # my $workingFolder = $strCurWorkingFolder . '/' . $strSessionName;
+     my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+     my $strSessionName = &ilog_getSessionName();
+     my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
     my $zipLocation = "$workingFolder/site-content.zip";
     if ( $zip->writeToFileNamed($zipLocation) != AZ_OK ) 
     {
@@ -2119,6 +2176,10 @@ sub pars_siteHasValidFrameworkDb
     my $dbUser;
     my $dbPassword;
     my $dbHost;    
+    my $strCurWorkingFolder = &utf_getCurrentWorkingFolder();
+    my $strSessionName = &ilog_getSessionName();
+    my $workingFolder = $strCurWorkingFolder . '/sessions/' . $strSessionName;
+
     if ($framework eq WORDPRESS)
     {
         `php read_wp_settings.php "$configFile" "$workingFolder/${framework}-settings.txt";`;
@@ -6618,7 +6679,7 @@ sub pars_createXML
             
             if($array[$i][SITENAME] eq $arrayDir[$j][SITENAME])
             { 
-                @temp = split /\²/,$array[$i][ALIAS];
+                @temp = split /\ï¿½/,$array[$i][ALIAS];
                 
                 for($k=0;$k<$#temp; $k = $k + 2)
                 {
@@ -6875,7 +6936,7 @@ sub pars_createXML
             my $k = 0;          
             if($array[$i][SITENAME] eq $arrayDir[$j][SITENAME])
             {
-                @temp = split /\²/,$array[$i][SCRIPTALIAS];                
+                @temp = split /\ï¿½/,$array[$i][SCRIPTALIAS];                
                 for($k=0;$k<$#temp; $k = $k + 2)
                 {
                     my $directoryName;

@@ -24,3 +24,4 @@ nytprof.out
 *.tar
 *-junk*
 Azure-Apache-Migration-Tool/
+/.sessions/
