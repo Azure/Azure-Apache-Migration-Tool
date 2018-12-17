@@ -409,8 +409,11 @@ sub pars_UploadPublishSettingsAllSites
         ilog_setLogInformation('INT_INFO',$recoveryFile,MSG_FILE_CLOSE,'');
     }
 
-    ilog_print(1, dTITLE_EXIT);
-    return 0; 
+    ilog_print(1, TITLE_EXIT);
+    return 0;
+
+
+
 }
 
 sub pars_UploadPublishSettings

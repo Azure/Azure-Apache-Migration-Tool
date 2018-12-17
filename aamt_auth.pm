@@ -341,7 +341,7 @@ sub auth_createSessionDirectory
 	
 	$migrationStatus='';
 	$returnCreateSuccess=0;
-	$sessionFilename= "./sessions/$sessionName/$sessionFilename";           #appended with the full path 
+	$sessionFilename= "./$sessionName/$sessionFilename";           #appended with the full path 
 	$DIRHANDLE= new IO::Dir ".";
     if(opendir (DIRHANDLE,$sessionName))
     {

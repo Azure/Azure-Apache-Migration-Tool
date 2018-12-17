@@ -46,7 +46,7 @@ More Information:  Visit http://www.movemetothecloud.net/LinuxMigration
 
 Remember to periodically update the tool from the above site.
 
-For support please open a ticket at :  https://github.com/Azure/Azure-Apache-Migration-Tool/issues
+For support please open a ticket at:  https://github.com/Azure/Azure-Apache-Migration-Tool/issues
 
 Important Notes:
     Super User rights are required to use the Apache to Azure App Service Migration Tool.\n";	  
@@ -67,7 +67,7 @@ For more information:  Visit http://www.movemetothecloud.net/LinuxMigration\n
 
 Remember to periodically update the tool from the above site.\n
 
-For support please open a ticket at :  https://github.com/Azure/Azure-Apache-Migration-Tool/issues\n
+For support please open a ticket at:  https://github.com/Azure/Azure-Apache-Migration-Tool/issues\n
 Thank You for using Apache to Azure App Service Migration Tool\n
 ---------------------------------------------------------------------------\n\n";
 use constant SUCCESS						=>						"1000";
